@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omv"
+version = "0.1.0"
+description = "Self-hosted control plane and CLI for monitoring hosts and launching native remote-access clients."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.116.0,<1.0.0",
+  "mss>=10.1.0,<11.0.0",
+  "pillow>=11.3.0,<12.0.0",
+  "psutil>=7.1.0,<8.0.0",
+  "pydantic>=2.11.0,<3.0.0",
+  "tomli-w>=1.2.0,<2.0.0",
+  "uvicorn[standard]>=0.35.0,<1.0.0",
+]
+
+[project.scripts]
+omv = "omniview.cli:main"
+
+[tool.uv]
+package = true
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+omniview = [
+  "frontend_assets/*",
+  "frontend_assets/**/*",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

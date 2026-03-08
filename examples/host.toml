@@ -1,0 +1,29 @@
+# Example OMV host config.
+# Real users should prefer: omv host init --hub-url http://HUB:8000
+hub_url = "http://127.0.0.1:8000"
+report_interval_seconds = 30
+screenshot_interval_seconds = 60
+screenshots_enabled = true
+node_id = "atlas-bot-lab"
+name = "Atlas Bot Lab"
+hostname = "atlas"
+overlay_ip = "100.84.16.10"
+platform = "linux"
+description = "Headless automation worker"
+location = "Lab rack"
+tags = ["bots", "gpu"]
+headless = true
+
+[[protocols]]
+kind = "moonlight"
+label = "Moonlight"
+priority = 1
+port = 47984
+app_name = "Desktop"
+
+[[protocols]]
+kind = "ssh"
+label = "SSH"
+priority = 2
+port = 22
+username = "ops"

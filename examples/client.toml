@@ -1,0 +1,9 @@
+# Example OMV native-client config.
+# Real users should prefer: omv client init
+host = "127.0.0.1"
+port = 32145
+moonlight_app_name = "Desktop"
+ssh_terminal = "auto"
+
+[commands]
+# moonlight = "/Applications/Moonlight.app/Contents/MacOS/Moonlight stream {host} \"{app_name}\""
