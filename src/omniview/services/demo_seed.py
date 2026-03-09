@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 
-from omniview.models import NodePlatform, NodeProfile, NodeRecord, ProtocolKind, ProtocolSpec, TelemetryMetrics, TelemetryPayload
+from omniview.models import ClientProfile, ClientRecord, NodePlatform, NodeProfile, NodeRecord, ProtocolCapability, ProtocolKind, ProtocolSpec, TelemetryMetrics, TelemetryPayload
 
 
 def build_demo_records() -> list[NodeRecord]:
@@ -175,6 +175,117 @@ def build_demo_records() -> list[NodeRecord]:
     )
 
     return [atlas, mac_mini, cinder, relay]
+
+
+def build_demo_client_records() -> list[ClientRecord]:
+    now = datetime.now(UTC)
+
+    desk = ClientRecord(
+        profile=ClientProfile(
+            client_id="studio-desk-client",
+            name="Studio Desk Client",
+            hostname="studio-desk",
+            overlay_ip="100.64.8.21",
+            platform=NodePlatform.MACOS,
+            hub_url="http://100.64.8.21:8000",
+            launcher_url="http://127.0.0.1:32145",
+            app_version="omv-0.2.1",
+            capabilities=[
+                ProtocolCapability(kind=ProtocolKind.MOONLIGHT, available=True, strategy="moonlight-cli", detail="Moonlight installed locally."),
+                ProtocolCapability(kind=ProtocolKind.VNC, available=True, strategy="url-opener", detail="Screen Sharing URI handler available."),
+                ProtocolCapability(kind=ProtocolKind.SSH, available=True, strategy="terminal-applescript", detail="Terminal SSH handoff available."),
+                ProtocolCapability(kind=ProtocolKind.GUACAMOLE, available=True, strategy="browser-opener", detail="Browser fallback available."),
+            ],
+        ),
+        telemetry=TelemetryPayload(
+            reported_at=now - timedelta(seconds=11),
+            metrics=TelemetryMetrics(
+                cpu_percent=18.5,
+                memory_percent=46.1,
+                memory_used_gb=7.4,
+                memory_total_gb=16.0,
+                temperature_c=43.7,
+                gpu_percent=8.0,
+                gpu_power_watts=None,
+                network_rx_mbps=6.1,
+                network_tx_mbps=1.8,
+                load_average_1=2.1,
+                load_average_5=1.7,
+                load_average_15=1.5,
+                network_latency_ms=22.4,
+                power_watts=None,
+                uptime_seconds=25214,
+            ),
+            active_session="console",
+            render_state="Launcher idle",
+            collector_notes=[
+                "gpu telemetry unavailable on this platform without a supported vendor tool.",
+                "machine power telemetry unavailable on this platform.",
+            ],
+            recent_logs=[
+                f"{(now - timedelta(seconds=30)).isoformat()} launch moonlight for Atlas Bot Lab via moonlight-cli",
+                f"{(now - timedelta(seconds=90)).isoformat()} client telemetry reporter started",
+            ],
+            recent_errors=[],
+        ),
+        registered_at=now - timedelta(minutes=40),
+        last_seen_at=now - timedelta(seconds=9),
+    )
+
+    field = ClientRecord(
+        profile=ClientProfile(
+            client_id="field-laptop-client",
+            name="Field Laptop Client",
+            hostname="fieldbook",
+            overlay_ip="100.103.91.16",
+            platform=NodePlatform.WINDOWS,
+            hub_url="http://100.64.8.21:8000",
+            launcher_url="http://127.0.0.1:32145",
+            app_version="omv-0.2.1",
+            capabilities=[
+                ProtocolCapability(kind=ProtocolKind.MOONLIGHT, available=False, detail="Moonlight was not detected locally."),
+                ProtocolCapability(kind=ProtocolKind.VNC, available=True, strategy="url-opener", detail="VNC URI handler available."),
+                ProtocolCapability(kind=ProtocolKind.SSH, available=True, strategy="windows-terminal", detail="Windows Terminal SSH handoff available."),
+                ProtocolCapability(kind=ProtocolKind.GUACAMOLE, available=True, strategy="browser-opener", detail="Browser fallback available."),
+            ],
+        ),
+        telemetry=TelemetryPayload(
+            reported_at=now - timedelta(minutes=5),
+            metrics=TelemetryMetrics(
+                cpu_percent=33.2,
+                memory_percent=58.8,
+                memory_used_gb=9.4,
+                memory_total_gb=16.0,
+                temperature_c=None,
+                gpu_percent=None,
+                gpu_power_watts=None,
+                network_rx_mbps=1.4,
+                network_tx_mbps=0.4,
+                load_average_1=None,
+                load_average_5=None,
+                load_average_15=None,
+                network_latency_ms=84.6,
+                power_watts=None,
+                uptime_seconds=6180,
+            ),
+            active_session="Console",
+            render_state="Launcher idle",
+            collector_notes=[
+                "gpu telemetry unavailable on this platform without a supported vendor tool.",
+                "machine power telemetry unavailable on this platform.",
+            ],
+            recent_logs=[
+                f"{(now - timedelta(minutes=8)).isoformat()} launch ssh for Mac Mini Studio via windows-terminal",
+            ],
+            recent_errors=[
+                f"{(now - timedelta(minutes=6)).isoformat()} launch rejected for Atlas Bot Lab (moonlight): Moonlight was not detected locally.",
+            ],
+        ),
+        registered_at=now - timedelta(hours=3),
+        last_seen_at=now - timedelta(minutes=4, seconds=33),
+    )
+
+    return [desk, field]
 
 
 def _build_record(*, profile: NodeProfile, telemetry: TelemetryPayload, last_seen_at: datetime) -> NodeRecord:

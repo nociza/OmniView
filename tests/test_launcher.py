@@ -19,9 +19,15 @@ class DummyRunner(CommandRunner):
 
 def make_settings(tmp_path: Path, *, token: str | None = None) -> LauncherSettings:
     return LauncherSettings(
+        hub_url='http://127.0.0.1:8000',
         host='127.0.0.1',
         port=32145,
+        client_id='viewer-client',
+        client_name='Viewer Client',
         token=token,
+        telemetry_enabled=False,
+        telemetry_interval_seconds=30,
+        log_retention=50,
         allow_origins=('*',),
         config_path=tmp_path / 'client.toml',
         moonlight_binary=None,

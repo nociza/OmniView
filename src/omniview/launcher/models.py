@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from omniview.models import NodePlatform, ProtocolKind
+from omniview.models import NodePlatform, ProtocolCapability, ProtocolKind
 
 AUTH_HEADER = "X-OMV-Token"
 
@@ -21,13 +21,6 @@ class LaunchRequest(BaseModel):
     app_name: str | None = None
     launch_uri: str | None = None
     dry_run: bool = False
-
-
-class ProtocolCapability(BaseModel):
-    kind: ProtocolKind
-    available: bool
-    strategy: str | None = None
-    detail: str
 
 
 class LauncherStatusResponse(BaseModel):

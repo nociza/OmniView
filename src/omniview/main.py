@@ -7,16 +7,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from omniview.api.routes.clients import router as clients_router
 from omniview.api.routes.health import router as health_router
 from omniview.api.routes.nodes import router as nodes_router
 from omniview.config import Settings, get_settings
-from omniview.services.demo_seed import build_demo_records
+from omniview.services.demo_seed import build_demo_client_records, build_demo_records
 from omniview.store import NodeRegistry
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     app_settings = settings or get_settings()
-    app = FastAPI(title=app_settings.api_title, version="0.1.0")
+    app = FastAPI(title=app_settings.api_title, version="0.2.1")
 
     if app_settings.cors_origins:
         app.add_middleware(
@@ -29,9 +30,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     registry = NodeRegistry(app_settings)
     registry.seed(build_demo_records())
+    registry.seed_clients(build_demo_client_records())
     app.state.registry = registry
 
     app.include_router(health_router, prefix="/api")
+    app.include_router(clients_router, prefix="/api")
     app.include_router(nodes_router, prefix="/api")
 
     _mount_frontend(app, app_settings.frontend_dist)

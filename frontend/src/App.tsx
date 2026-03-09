@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ClientCard } from './components/ClientCard';
+import { ClientDetail } from './components/ClientDetail';
 import { LauncherStatus } from './components/LauncherStatus';
 import { NodeCard } from './components/NodeCard';
 import { NodeDetail } from './components/NodeDetail';
@@ -10,6 +12,7 @@ function App() {
   const { data, loading, refreshing, error, refresh } = useDashboard();
   const launcher = useLauncher();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!data?.nodes.length) {
@@ -22,9 +25,24 @@ function App() {
     }
   }, [data, selectedNodeId]);
 
+  useEffect(() => {
+    if (!data?.clients.length) {
+      setSelectedClientId(null);
+      return;
+    }
+
+    if (!selectedClientId || !data.clients.some((client) => client.client_id === selectedClientId)) {
+      setSelectedClientId(data.clients[0].client_id);
+    }
+  }, [data, selectedClientId]);
+
   const selectedNode = useMemo(
     () => data?.nodes.find((node) => node.node_id === selectedNodeId) ?? null,
     [data, selectedNodeId],
+  );
+  const selectedClient = useMemo(
+    () => data?.clients.find((client) => client.client_id === selectedClientId) ?? null,
+    [data, selectedClientId],
   );
 
   return (
@@ -48,7 +66,15 @@ function App() {
         </div>
       </header>
 
-      {data ? <SummaryStrip summary={data.summary} refreshing={refreshing} onRefresh={() => void refresh()} /> : null}
+      {data ? (
+        <SummaryStrip
+          summary={data.summary}
+          clientCount={data.clients.length}
+          onlineClients={data.clients.filter((client) => client.status === 'online').length}
+          refreshing={refreshing}
+          onRefresh={() => void refresh()}
+        />
+      ) : null}
 
       <LauncherStatus
         baseUrl={launcher.settings.baseUrl}
@@ -82,6 +108,24 @@ function App() {
         </section>
         <NodeDetail node={selectedNode} launcher={launcher} />
       </main>
+
+      <section className="workspace workspace--clients">
+        <section className="fleet-column">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Viewing clients</p>
+              <h2>Launch machines</h2>
+            </div>
+            <p>{data?.clients.length ?? 0} clients reporting</p>
+          </div>
+          <div className="node-grid client-grid">
+            {data?.clients.map((client) => (
+              <ClientCard key={client.client_id} client={client} selected={client.client_id === selectedClientId} onSelect={setSelectedClientId} />
+            ))}
+          </div>
+        </section>
+        <ClientDetail client={selectedClient} />
+      </section>
     </div>
   );
 }

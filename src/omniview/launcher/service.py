@@ -6,6 +6,7 @@ import platform
 import shlex
 import shutil
 import subprocess
+from typing import Callable
 
 from omniview.launcher.config import LauncherSettings
 from omniview.launcher.models import LaunchRequest, LaunchResponse, LauncherStatusResponse, ProtocolCapability
@@ -42,11 +43,15 @@ class LauncherService:
         system_name: str | None = None,
         which_resolver=shutil.which,
         runner: CommandRunner | None = None,
+        on_info: Callable[[str], None] | None = None,
+        on_error: Callable[[str], None] | None = None,
     ) -> None:
         self.settings = settings
         self.system_name = (system_name or platform.system()).lower()
         self.which = which_resolver
         self.runner = runner or CommandRunner()
+        self.on_info = on_info
+        self.on_error = on_error
 
     def status(self) -> LauncherStatusResponse:
         return LauncherStatusResponse(
@@ -75,16 +80,24 @@ class LauncherService:
             return ProtocolCapability(kind=kind, available=False, detail=str(exc))
 
     def launch(self, request: LaunchRequest) -> LaunchResponse:
-        plan = self.plan(request)
-        if not request.dry_run:
-            self.runner.spawn(plan.command)
-        return LaunchResponse(
-            launched=not request.dry_run,
-            protocol=request.protocol,
-            strategy=plan.strategy,
-            detail=plan.detail,
-            command=plan.command,
-        )
+        try:
+            plan = self.plan(request)
+            if not request.dry_run:
+                self.runner.spawn(plan.command)
+                self._record_info(f"launch {request.protocol.value} for {request.node_name} via {plan.strategy}")
+            return LaunchResponse(
+                launched=not request.dry_run,
+                protocol=request.protocol,
+                strategy=plan.strategy,
+                detail=plan.detail,
+                command=plan.command,
+            )
+        except LauncherUnsupportedError as exc:
+            self._record_error(f"launch rejected for {request.node_name} ({request.protocol.value}): {exc}")
+            raise
+        except OSError as exc:
+            self._record_error(f"launch failed for {request.node_name} ({request.protocol.value}): {exc}")
+            raise
 
     def plan(self, request: LaunchRequest) -> ExecutionPlan:
         template_plan = self._plan_from_template(request)
@@ -275,6 +288,14 @@ class LauncherService:
 
     def _host(self, request: LaunchRequest) -> str:
         return request.host or request.overlay_ip
+
+    def _record_info(self, message: str) -> None:
+        if self.on_info is not None:
+            self.on_info(message)
+
+    def _record_error(self, message: str) -> None:
+        if self.on_error is not None:
+            self.on_error(message)
 
     def _ssh_target(self, request: LaunchRequest) -> str:
         host = self._host(request)

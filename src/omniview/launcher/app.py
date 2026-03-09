@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 import uvicorn
@@ -8,6 +9,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from omniview.client_telemetry import ClientRuntimeState, ClientTelemetryCollector, ClientTelemetryReporter
 from omniview.launcher.config import LauncherSettings, get_launcher_settings
 from omniview.launcher.models import AUTH_HEADER, LaunchRequest, LaunchResponse, LauncherStatusResponse
 from omniview.launcher.service import LauncherService, LauncherUnsupportedError
@@ -23,7 +25,27 @@ def create_app(
     service: LauncherService | None = None,
 ) -> FastAPI:
     app_settings = settings or get_launcher_settings()
-    app = FastAPI(title="OMV Native Client", version="0.1.0")
+    runtime = ClientRuntimeState(max_entries=app_settings.log_retention)
+    launcher_service = service or LauncherService(
+        app_settings,
+        on_info=runtime.info,
+        on_error=runtime.error,
+    )
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        reporter: ClientTelemetryReporter | None = None
+        if app_settings.telemetry_enabled:
+            collector = ClientTelemetryCollector(app_settings, runtime, launcher_service)
+            reporter = ClientTelemetryReporter(collector, app_settings.telemetry_interval_seconds)
+            reporter.start()
+        try:
+            yield
+        finally:
+            if reporter is not None:
+                reporter.stop()
+
+    app = FastAPI(title="OMV Native Client", version="0.2.1", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(app_settings.allow_origins) or ["*"],
@@ -33,7 +55,8 @@ def create_app(
     )
 
     app.state.settings = app_settings
-    app.state.service = service or LauncherService(app_settings)
+    app.state.service = launcher_service
+    app.state.runtime = runtime
 
     @app.get("/health", response_model=LauncherHealthResponse)
     def health() -> LauncherHealthResponse:

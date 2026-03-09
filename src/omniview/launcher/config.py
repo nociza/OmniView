@@ -25,9 +25,15 @@ def _csv_env(name: str, default: str) -> tuple[str, ...]:
 
 @dataclass(frozen=True, slots=True)
 class LauncherSettings:
+    hub_url: str
     host: str
     port: int
+    client_id: str | None
+    client_name: str | None
     token: str | None
+    telemetry_enabled: bool
+    telemetry_interval_seconds: int
+    log_retention: int
     allow_origins: tuple[str, ...]
     config_path: Path
     moonlight_binary: str | None
@@ -48,9 +54,15 @@ def get_launcher_settings() -> LauncherSettings:
             parsed_templates[kind] = value.strip()
 
     return LauncherSettings(
+        hub_url=str(raw.get("hub_url", "http://127.0.0.1:8000")),
         host=os.getenv("OMV_LAUNCHER_HOST", str(raw.get("host", "127.0.0.1"))),
         port=int(os.getenv("OMV_LAUNCHER_PORT", str(raw.get("port", 32145)))),
+        client_id=str(raw.get("client_id", "")).strip() or None,
+        client_name=str(raw.get("name", "")).strip() or None,
         token=os.getenv("OMV_LAUNCHER_TOKEN", str(raw.get("token", "")).strip()) or None,
+        telemetry_enabled=str(raw.get("telemetry_enabled", True)).lower() not in {"0", "false", "no"},
+        telemetry_interval_seconds=int(raw.get("telemetry_interval_seconds", 30)),
+        log_retention=int(raw.get("log_retention", 50)),
         allow_origins=_csv_env(
             "OMV_LAUNCHER_ALLOW_ORIGINS",
             ",".join(raw.get("allow_origins", ["*"])) if isinstance(raw.get("allow_origins"), list) else "*",

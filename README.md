@@ -3,7 +3,7 @@
 OMV is a self-hosted control plane for personal machines. One CLI installs everything a user needs to run the three roles in the system:
 
 - `hub`: the central FastAPI server and embedded web UI
-- `client`: the native-client launcher that opens Moonlight, VNC, SSH, or browser fallbacks on the machine you are sitting at
+- `client`: the native-client launcher that opens Moonlight, VNC, SSH, or browser fallbacks on the machine you are sitting at, and reports viewer-machine telemetry back to the hub
 - `host`: the reporting agent that pushes telemetry, screenshots, and protocol metadata to the hub
 
 The PyPI package is the product. End users install only the CLI:
@@ -77,7 +77,7 @@ Open `http://127.0.0.1:8000` locally or the machine's overlay-network IP from an
 On any machine that should open native apps when you click `Launch` in the dashboard:
 
 ```bash
-omv client init
+omv client init --hub-url http://YOUR-HUB:8000
 omv client install moonlight
 omv client start
 ```
@@ -89,6 +89,8 @@ omv client service-install
 ```
 
 If the hub and the viewing machine are the same box, run both `hub` and `client` there.
+
+The client service now reports viewer-side telemetry to the hub: CPU, memory, load average, network throughput, latency to the hub, best-effort GPU/power data, and recent launcher errors/logs.
 
 ### 3. Set up a host
 

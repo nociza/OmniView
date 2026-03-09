@@ -1,7 +1,13 @@
 # Example OMV native-client config.
-# Real users should prefer: omv client init
+# Real users should prefer: omv client init --hub-url http://HUB:8000
+hub_url = "http://127.0.0.1:8000"
 host = "127.0.0.1"
 port = 32145
+client_id = "studio-desk-client"
+name = "Studio Desk Client"
+telemetry_enabled = true
+telemetry_interval_seconds = 30
+log_retention = 50
 moonlight_app_name = "Desktop"
 ssh_terminal = "auto"
 

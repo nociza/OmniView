@@ -15,6 +15,7 @@ from PIL import Image
 
 from omniview.models import AgentReport, NodeProfile, TelemetryMetrics, TelemetryPayload
 from omniview.role_config import HostConfig
+from omniview.telemetry import NetworkRateSampler, load_average, temperature_celsius, uptime_seconds
 
 
 def package_version() -> str:
@@ -23,22 +24,6 @@ def package_version() -> str:
     except PackageNotFoundError:
         pass
     return "0.0.0"
-
-
-class NetworkRateSampler:
-    def __init__(self) -> None:
-        self._last = psutil.net_io_counters()
-        self._last_at = time.monotonic()
-
-    def sample(self) -> tuple[float, float]:
-        now = time.monotonic()
-        current = psutil.net_io_counters()
-        elapsed = max(now - self._last_at, 1e-6)
-        rx_mbps = ((current.bytes_recv - self._last.bytes_recv) * 8) / elapsed / 1_000_000
-        tx_mbps = ((current.bytes_sent - self._last.bytes_sent) * 8) / elapsed / 1_000_000
-        self._last = current
-        self._last_at = now
-        return max(rx_mbps, 0.0), max(tx_mbps, 0.0)
 
 
 class ThumbnailCapture:
@@ -93,15 +78,20 @@ class HostAgent:
     def build_report(self) -> AgentReport:
         rx_mbps, tx_mbps = self.network.sample()
         memory = psutil.virtual_memory()
+        load_1, load_5, load_15 = load_average()
         metrics = TelemetryMetrics(
             cpu_percent=psutil.cpu_percent(interval=0.2),
             memory_percent=memory.percent,
             memory_used_gb=memory.used / (1024 ** 3),
             memory_total_gb=memory.total / (1024 ** 3),
-            temperature_c=self._temperature_celsius(),
+            temperature_c=temperature_celsius(),
             gpu_percent=None,
             network_rx_mbps=rx_mbps,
             network_tx_mbps=tx_mbps,
+            load_average_1=load_1,
+            load_average_5=load_5,
+            load_average_15=load_15,
+            uptime_seconds=uptime_seconds(),
         )
         telemetry = TelemetryPayload(
             reported_at=datetime.now(UTC),
@@ -126,15 +116,6 @@ class HostAgent:
             agent_version=package_version(),
             protocols=self.config.protocols,
         )
-
-    @staticmethod
-    def _temperature_celsius() -> float | None:
-        try:
-            sensors = psutil.sensors_temperatures(fahrenheit=False)
-        except (AttributeError, NotImplementedError):
-            return None
-        values = [entry.current for group in sensors.values() for entry in group if entry.current is not None]
-        return max(values) if values else None
 
     @staticmethod
     def _active_session() -> str | None:

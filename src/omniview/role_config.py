@@ -32,9 +32,15 @@ class HubConfig(BaseModel):
 
 
 class ClientConfig(BaseModel):
+    hub_url: str = "http://127.0.0.1:8000"
     host: str = "127.0.0.1"
     port: int = 32145
+    client_id: str | None = None
+    name: str | None = None
     token: str | None = None
+    telemetry_enabled: bool = True
+    telemetry_interval_seconds: int = Field(default=30, ge=5)
+    log_retention: int = Field(default=50, ge=10, le=500)
     allow_origins: list[str] = Field(default_factory=lambda: ["*"])
     moonlight_binary: str | None = None
     moonlight_app_name: str = "Desktop"

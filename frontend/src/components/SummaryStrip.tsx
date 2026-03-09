@@ -2,16 +2,20 @@ import type { DashboardSummary } from '../types';
 
 interface SummaryStripProps {
   summary: DashboardSummary;
+  clientCount: number;
+  onlineClients: number;
   refreshing: boolean;
   onRefresh: () => void;
 }
 
-export function SummaryStrip({ summary, refreshing, onRefresh }: SummaryStripProps) {
+export function SummaryStrip({ summary, clientCount, onlineClients, refreshing, onRefresh }: SummaryStripProps) {
   const cards = [
     { label: 'Fleet', value: summary.counts.total, tone: 'neutral' },
     { label: 'Online', value: summary.counts.online, tone: 'online' },
     { label: 'Stale', value: summary.counts.stale, tone: 'stale' },
     { label: 'Offline', value: summary.counts.offline, tone: 'offline' },
+    { label: 'Clients', value: clientCount, tone: 'neutral' },
+    { label: 'Client Online', value: onlineClients, tone: 'online' },
     { label: 'Avg CPU', value: summary.average_cpu_percent != null ? `${summary.average_cpu_percent}%` : '—', tone: 'neutral' },
   ];
 

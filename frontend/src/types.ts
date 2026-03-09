@@ -9,8 +9,15 @@ export interface TelemetryMetrics {
   memory_total_gb?: number | null;
   temperature_c?: number | null;
   gpu_percent?: number | null;
+  gpu_power_watts?: number | null;
   network_rx_mbps?: number | null;
   network_tx_mbps?: number | null;
+  load_average_1?: number | null;
+  load_average_5?: number | null;
+  load_average_15?: number | null;
+  network_latency_ms?: number | null;
+  power_watts?: number | null;
+  uptime_seconds?: number | null;
 }
 
 export interface TelemetryPayload {
@@ -19,6 +26,9 @@ export interface TelemetryPayload {
   thumbnail_data_url?: string | null;
   render_state?: string | null;
   active_session?: string | null;
+  collector_notes: string[];
+  recent_logs: string[];
+  recent_errors: string[];
 }
 
 export interface ProtocolLaunch {
@@ -74,6 +84,7 @@ export interface DashboardSummary {
 export interface DashboardResponse {
   summary: DashboardSummary;
   nodes: NodeView[];
+  clients: ClientView[];
   poll_interval_seconds: number;
 }
 
@@ -90,6 +101,25 @@ export interface LauncherStatusResponse {
   auth_required: boolean;
   config_path: string;
   protocols: ProtocolCapability[];
+}
+
+export interface ClientProfileCapability extends ProtocolCapability {}
+
+export interface ClientView {
+  client_id: string;
+  name: string;
+  hostname: string;
+  overlay_ip: string;
+  platform: NodePlatform;
+  hub_url: string;
+  launcher_url: string;
+  app_version?: string | null;
+  status: NodeStatus;
+  status_message: string;
+  last_seen_at: string;
+  heartbeat_age_seconds: number;
+  capabilities: ClientProfileCapability[];
+  telemetry?: TelemetryPayload | null;
 }
 
 export interface LaunchRequestPayload {

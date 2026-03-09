@@ -29,6 +29,36 @@ export function formatThroughput(value?: number | null): string {
   return value == null ? '—' : `${value.toFixed(1)} Mb/s`;
 }
 
+export function formatLatency(value?: number | null): string {
+  return value == null ? '—' : `${value.toFixed(1)} ms`;
+}
+
+export function formatLoad(metrics: TelemetryMetrics): string {
+  if (metrics.load_average_1 == null && metrics.load_average_5 == null && metrics.load_average_15 == null) {
+    return '—';
+  }
+  return [metrics.load_average_1, metrics.load_average_5, metrics.load_average_15]
+    .map((value) => (value == null ? '—' : value.toFixed(2)))
+    .join(' / ');
+}
+
+export function formatWatts(value?: number | null): string {
+  return value == null ? '—' : `${value.toFixed(1)} W`;
+}
+
+export function formatUptime(seconds?: number | null): string {
+  if (seconds == null) {
+    return '—';
+  }
+  if (seconds < 3600) {
+    return `${Math.round(seconds / 60)}m`;
+  }
+  if (seconds < 86400) {
+    return `${Math.round(seconds / 3600)}h`;
+  }
+  return `${Math.round(seconds / 86400)}d`;
+}
+
 export function platformLabel(platform: NodePlatform): string {
   return {
     linux: 'Linux',

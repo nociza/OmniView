@@ -71,9 +71,14 @@ def build_parser() -> argparse.ArgumentParser:
     client = subparsers.add_parser("client", help="Configure and run the native client launcher.")
     client_sub = client.add_subparsers(dest="client_command", required=True)
     client_init = client_sub.add_parser("init", help="Write a native-client config file.")
+    client_init.add_argument("--hub-url", default="http://127.0.0.1:8000")
     client_init.add_argument("--host", default="127.0.0.1")
     client_init.add_argument("--port", type=int, default=32145)
+    client_init.add_argument("--client-id")
+    client_init.add_argument("--name")
     client_init.add_argument("--token")
+    client_init.add_argument("--telemetry-interval", type=int, default=30)
+    client_init.add_argument("--disable-telemetry", action="store_true")
     client_init.add_argument("--moonlight-binary")
     client_init.add_argument("--moonlight-app", default="Desktop")
     client_init.set_defaults(func=client_init_command)
@@ -199,9 +204,14 @@ def hub_service_uninstall_command(args: argparse.Namespace) -> None:
 
 def client_init_command(args: argparse.Namespace) -> None:
     config = ClientConfig(
+        hub_url=args.hub_url,
         host=args.host,
         port=args.port,
+        client_id=args.client_id,
+        name=args.name,
         token=args.token,
+        telemetry_enabled=not args.disable_telemetry,
+        telemetry_interval_seconds=args.telemetry_interval,
         moonlight_binary=args.moonlight_binary,
         moonlight_app_name=args.moonlight_app,
     )
@@ -228,7 +238,9 @@ def client_doctor_command(args: argparse.Namespace) -> None:
     config = load_client_config()
     base_url = f"http://{config.host}:{config.port}"
     print(f"config:     {client_config_path()}")
+    print(f"hub:        {config.hub_url}")
     print(f"launcher:   {config.host}:{config.port}")
+    print(f"telemetry:  {'enabled' if config.telemetry_enabled else 'disabled'} every {config.telemetry_interval_seconds}s")
     print(f"moonlight:  {detect_tool('moonlight').detail}")
     print(f"tailscale:  {detect_tool('tailscale').detail}")
     try:
@@ -362,6 +374,7 @@ def status_command(args: argparse.Namespace) -> None:
         "client:     "
         f"configured={'yes' if client_configured else 'no '} "
         f"listen={client.host}:{client.port} "
+        f"hub={client.hub_url} "
         f"service={client_health}"
     )
 
@@ -448,15 +461,17 @@ def _select_protocol(node: dict[str, Any], *, override: str | None) -> dict[str,
     raise SystemExit(f'Node "{node["node_id"]}" does not support protocol "{override}".')
 
 
-def _fetch_json(url: str) -> Any:
+def _fetch_json(url: str, *, timeout_seconds: float = 5.0) -> Any:
     try:
-        with request.urlopen(request.Request(url, headers={"Accept": "application/json"})) as response:
+        with request.urlopen(request.Request(url, headers={"Accept": "application/json"}), timeout=timeout_seconds) as response:
             return json.load(response)
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
         raise SystemExit(f"Request failed with HTTP {exc.code}: {detail or exc.reason}") from exc
     except error.URLError as exc:
         raise SystemExit(f"Unable to reach {url}: {exc.reason}") from exc
+    except TimeoutError as exc:
+        raise SystemExit(f"Unable to reach {url}: timed out") from exc
 
 
 def _normalize_base_url(base_url: str) -> str:
@@ -492,7 +507,7 @@ def _package_version() -> str:
 
 def _probe_status(url: str, extractor) -> str:
     try:
-        payload = _fetch_json(url)
+        payload = _fetch_json(url, timeout_seconds=1.5)
     except SystemExit:
         return "unreachable"
     return str(extractor(payload))

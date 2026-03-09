@@ -16,6 +16,7 @@ def test_dashboard_seed_data_is_available() -> None:
     assert payload["summary"]["counts"]["total"] >= 4
     assert payload["poll_interval_seconds"] == 15
     assert any(node["preferred_protocol"] == "moonlight" for node in payload["nodes"])
+    assert len(payload["clients"]) >= 2
 
 
 def test_root_serves_embedded_frontend() -> None:
@@ -80,3 +81,49 @@ def test_unknown_node_telemetry_returns_404() -> None:
         },
     )
     assert response.status_code == 404
+
+
+def test_client_report_upserts_viewer_client() -> None:
+    payload = {
+        "profile": {
+            "client_id": "road-warrior-client",
+            "name": "Road Warrior Client",
+            "hostname": "roadbook",
+            "overlay_ip": "100.99.1.11",
+            "platform": "macos",
+            "hub_url": "http://100.64.8.21:8000",
+            "launcher_url": "http://127.0.0.1:32145",
+            "app_version": "omv-0.2.1",
+            "capabilities": [
+                {"kind": "moonlight", "available": True, "strategy": "moonlight-cli", "detail": "Moonlight installed locally."},
+                {"kind": "ssh", "available": True, "strategy": "terminal-applescript", "detail": "Terminal SSH handoff available."},
+            ],
+        },
+        "telemetry": {
+            "metrics": {
+                "cpu_percent": 22.5,
+                "memory_percent": 51.0,
+                "memory_used_gb": 8.1,
+                "memory_total_gb": 16.0,
+                "network_latency_ms": 31.4,
+                "network_rx_mbps": 3.2,
+                "network_tx_mbps": 1.0,
+                "uptime_seconds": 7200,
+            },
+            "render_state": "Launcher idle",
+            "active_session": "console",
+            "recent_logs": ["2026-03-08T01:02:03Z launch ssh for atlas via terminal-applescript"],
+            "recent_errors": [],
+            "collector_notes": [],
+        },
+    }
+
+    response = client.post("/api/clients/report", json=payload)
+    assert response.status_code == 202
+    viewer = response.json()
+    assert viewer["client_id"] == "road-warrior-client"
+    assert viewer["capabilities"][0]["kind"] == "moonlight"
+
+    lookup = client.get("/api/clients/road-warrior-client")
+    assert lookup.status_code == 200
+    assert lookup.json()["telemetry"]["metrics"]["network_latency_ms"] == 31.4

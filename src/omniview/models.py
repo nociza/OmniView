@@ -44,8 +44,15 @@ class TelemetryMetrics(BaseModel):
     memory_total_gb: float | None = Field(default=None, ge=0)
     temperature_c: float | None = None
     gpu_percent: float | None = Field(default=None, ge=0, le=100)
+    gpu_power_watts: float | None = Field(default=None, ge=0)
     network_rx_mbps: float | None = Field(default=None, ge=0)
     network_tx_mbps: float | None = Field(default=None, ge=0)
+    load_average_1: float | None = Field(default=None, ge=0)
+    load_average_5: float | None = Field(default=None, ge=0)
+    load_average_15: float | None = Field(default=None, ge=0)
+    network_latency_ms: float | None = Field(default=None, ge=0)
+    power_watts: float | None = Field(default=None, ge=0)
+    uptime_seconds: int | None = Field(default=None, ge=0)
 
 
 class TelemetryPayload(BaseModel):
@@ -54,6 +61,9 @@ class TelemetryPayload(BaseModel):
     thumbnail_data_url: str | None = None
     render_state: str | None = None
     active_session: str | None = None
+    collector_notes: list[str] = Field(default_factory=list)
+    recent_logs: list[str] = Field(default_factory=list)
+    recent_errors: list[str] = Field(default_factory=list)
 
 
 class NodeProfile(BaseModel):
@@ -92,6 +102,13 @@ class ProtocolLaunch(BaseModel):
     is_primary: bool = False
 
 
+class ProtocolCapability(BaseModel):
+    kind: ProtocolKind
+    available: bool
+    strategy: str | None = None
+    detail: str
+
+
 class NodeRecord(BaseModel):
     profile: NodeProfile
     telemetry: TelemetryPayload | None = None
@@ -119,6 +136,42 @@ class NodeView(BaseModel):
     telemetry: TelemetryPayload | None = None
 
 
+class ClientProfile(BaseModel):
+    client_id: str = Field(min_length=2, max_length=64)
+    name: str = Field(min_length=2, max_length=100)
+    hostname: str = Field(min_length=1, max_length=255)
+    overlay_ip: str = Field(min_length=3, max_length=255)
+    platform: NodePlatform
+    hub_url: str
+    launcher_url: str
+    app_version: str | None = None
+    capabilities: list[ProtocolCapability] = Field(default_factory=list)
+
+
+class ClientRecord(BaseModel):
+    profile: ClientProfile
+    telemetry: TelemetryPayload | None = None
+    registered_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    last_seen_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ClientView(BaseModel):
+    client_id: str
+    name: str
+    hostname: str
+    overlay_ip: str
+    platform: NodePlatform
+    hub_url: str
+    launcher_url: str
+    app_version: str | None = None
+    status: NodeStatus
+    status_message: str
+    last_seen_at: datetime
+    heartbeat_age_seconds: int = Field(ge=0)
+    capabilities: list[ProtocolCapability] = Field(default_factory=list)
+    telemetry: TelemetryPayload | None = None
+
+
 class DashboardCounts(BaseModel):
     total: int = 0
     online: int = 0
@@ -136,9 +189,15 @@ class DashboardSummary(BaseModel):
 class DashboardResponse(BaseModel):
     summary: DashboardSummary
     nodes: list[NodeView]
+    clients: list[ClientView] = Field(default_factory=list)
     poll_interval_seconds: int = Field(ge=1)
 
 
 class AgentReport(BaseModel):
     profile: NodeProfile
+    telemetry: TelemetryPayload
+
+
+class ClientReport(BaseModel):
+    profile: ClientProfile
     telemetry: TelemetryPayload

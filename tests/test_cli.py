@@ -163,7 +163,7 @@ username = "ops"
 """.strip(),
         encoding="utf-8",
     )
-    monkeypatch.setattr("omniview.cli._fetch_json", lambda url: {"status": "ok"} if url.endswith("/api/health") else {"viewer_platform": "darwin"})
+    monkeypatch.setattr("omniview.cli._fetch_json", lambda url, **kwargs: {"status": "ok"} if url.endswith("/api/health") else {"viewer_platform": "darwin"})
     monkeypatch.setattr("omniview.cli.detect_tool", lambda name: Namespace(installed=name != "sunshine", detail="ok"))
 
     capsys.readouterr()

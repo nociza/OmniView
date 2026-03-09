@@ -246,7 +246,7 @@ code {
 
 .summary-strip__cards {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 12px;
 }
 
@@ -327,6 +327,10 @@ code {
   align-items: start;
 }
 
+.workspace--clients {
+  margin-top: 24px;
+}
+
 .section-heading {
   display: flex;
   justify-content: space-between;
@@ -391,6 +395,32 @@ code {
 
 .node-card__body {
   padding: 18px;
+}
+
+.client-card {
+  padding: 18px;
+}
+
+.client-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.client-card__header h3 {
+  margin: 12px 0 6px;
+}
+
+.client-card__header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.client-card__caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .node-card__header {
@@ -635,6 +665,32 @@ code {
 
 .launch-button--guacamole {
   background: linear-gradient(135deg, #5d6d2b, #2f8c4b);
+}
+
+.diagnostic-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.diagnostic-list p {
+  margin: 0;
+  border-radius: 16px;
+  padding: 10px 12px;
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  font-family: "SFMono-Regular", "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.82rem;
+}
+
+.diagnostic-list--error p {
+  background: rgba(201, 75, 75, 0.08);
+  color: var(--danger);
+}
+
+.diagnostic-list--note p {
+  background: rgba(16, 158, 162, 0.08);
+  color: #17696d;
 }
 
 .status-badge {
