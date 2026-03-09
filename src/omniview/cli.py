@@ -31,6 +31,7 @@ from omniview.role_config import (
     save_host_config,
     save_hub_config,
 )
+from omniview.security import ADMIN_AUTH_SCHEME, ensure_http_url, generate_secret, is_loopback_host, launcher_allow_origins, requires_tls_for_bind_host
 from omniview.service_manager import ServiceDefinition, ServiceManagerUnsupported, install_user_service, resolve_omv_executable, uninstall_user_service
 
 
@@ -48,19 +49,34 @@ def build_parser() -> argparse.ArgumentParser:
     hub = subparsers.add_parser("hub", help="Configure and run the central hub.")
     hub_sub = hub.add_subparsers(dest="hub_command", required=True)
     hub_init = hub_sub.add_parser("init", help="Write a hub config file.")
-    hub_init.add_argument("--host", default="0.0.0.0")
+    hub_init.add_argument("--host")
     hub_init.add_argument("--port", type=int, default=8000)
     hub_init.add_argument("--cors-origin", action="append", default=[])
+    hub_init.add_argument("--tls-cert")
+    hub_init.add_argument("--tls-key")
+    hub_init.add_argument("--allow-insecure-public-http", action="store_true")
     hub_init.set_defaults(func=hub_init_command)
 
     hub_start = hub_sub.add_parser("start", help="Start the hub from config.")
     hub_start.add_argument("--host")
     hub_start.add_argument("--port", type=int)
+    hub_start.add_argument("--tls-cert")
+    hub_start.add_argument("--tls-key")
+    hub_start.add_argument("--allow-insecure-public-http", action="store_true")
     hub_start.set_defaults(func=hub_start_command)
 
     hub_doctor = hub_sub.add_parser("doctor", help="Inspect the hub setup.")
     hub_doctor.add_argument("--base-url")
     hub_doctor.set_defaults(func=hub_doctor_command)
+
+    hub_enroll = hub_sub.add_parser("enroll", help="Print a secure bootstrap command for another machine.")
+    hub_enroll.add_argument("role", choices=["host", "client", "browser"])
+    hub_enroll.add_argument("--hub-url")
+    hub_enroll.set_defaults(func=hub_enroll_command)
+
+    hub_rotate_tokens = hub_sub.add_parser("rotate-tokens", help="Rotate hub admin and/or agent tokens.")
+    hub_rotate_tokens.add_argument("scope", choices=["admin", "agent", "all"], nargs="?", default="all")
+    hub_rotate_tokens.set_defaults(func=hub_rotate_tokens_command)
 
     hub_service_install = hub_sub.add_parser("service-install", help="Install the hub as a user service.")
     hub_service_install.set_defaults(func=hub_service_install_command)
@@ -72,6 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
     client_sub = client.add_subparsers(dest="client_command", required=True)
     client_init = client_sub.add_parser("init", help="Write a native-client config file.")
     client_init.add_argument("--hub-url", default="http://127.0.0.1:8000")
+    client_init.add_argument("--hub-token")
     client_init.add_argument("--host", default="127.0.0.1")
     client_init.add_argument("--port", type=int, default=32145)
     client_init.add_argument("--client-id")
@@ -81,6 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     client_init.add_argument("--disable-telemetry", action="store_true")
     client_init.add_argument("--moonlight-binary")
     client_init.add_argument("--moonlight-app", default="Desktop")
+    client_init.add_argument("--allow-origin", action="append", default=[])
     client_init.set_defaults(func=client_init_command)
 
     client_start = client_sub.add_parser("start", help="Start the local launcher from config.")
@@ -105,6 +123,7 @@ def build_parser() -> argparse.ArgumentParser:
     host_sub = host.add_subparsers(dest="host_command", required=True)
     host_init = host_sub.add_parser("init", help="Write a host config file.")
     host_init.add_argument("--hub-url", default="http://127.0.0.1:8000")
+    host_init.add_argument("--hub-token")
     host_init.add_argument("--node-id")
     host_init.add_argument("--name")
     host_init.add_argument("--overlay-ip")
@@ -147,6 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     nodes = subparsers.add_parser("nodes", help="List nodes from a running hub.")
     nodes.add_argument("--base-url", default=None, help="Base URL of the control plane.")
+    nodes.add_argument("--admin-token", default=None, help="Hub admin token. Defaults to the local hub config when available.")
     nodes.set_defaults(func=nodes_command)
 
     capabilities = subparsers.add_parser("capabilities", help="Show local native-client launcher capabilities.")
@@ -155,6 +175,7 @@ def build_parser() -> argparse.ArgumentParser:
     launch = subparsers.add_parser("launch", help="Launch a node protocol directly from the command line.")
     launch.add_argument("node_id", help="Node identifier from the control plane.")
     launch.add_argument("--base-url", default=None, help="Base URL of the control plane.")
+    launch.add_argument("--admin-token", default=None, help="Hub admin token. Defaults to the local hub config when available.")
     launch.add_argument("--protocol", choices=[kind.value for kind in ProtocolKind], help="Override the protocol to launch.")
     launch.add_argument("--dry-run", action="store_true", help="Print the command that would run instead of launching it.")
     launch.set_defaults(func=launch_command)
@@ -163,33 +184,117 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def hub_init_command(args: argparse.Namespace) -> None:
-    config = HubConfig(host=args.host, port=args.port, cors_origins=args.cors_origin or HubConfig().cors_origins)
+    defaults = HubConfig()
+    config = HubConfig(
+        host=args.host or defaults.host,
+        port=args.port,
+        cors_origins=args.cors_origin or defaults.cors_origins,
+        admin_token=defaults.admin_token,
+        agent_token=defaults.agent_token,
+        tls_certfile=args.tls_cert,
+        tls_keyfile=args.tls_key,
+        allow_insecure_public_http=args.allow_insecure_public_http,
+        max_request_bytes=defaults.max_request_bytes,
+        max_nodes=defaults.max_nodes,
+        max_clients=defaults.max_clients,
+    )
+    _validate_hub_runtime_security(config)
     path = save_hub_config(config)
     print(f"Wrote hub config to {path}")
+    print(f"Hub URL: {_hub_base_url(config)}")
+    print(f"Admin token: {config.admin_token}")
+    print(f"Agent token: {config.agent_token}")
+    if _hub_has_tls(config):
+        print(f"TLS: {config.tls_certfile}")
+    print("Bootstrap another machine with: omv hub enroll host|client|browser")
     print("Next: omv hub start")
     print("Optional: omv hub service-install")
 
 
 def hub_start_command(args: argparse.Namespace) -> None:
     config = load_hub_config()
-    effective_host = args.host or config.host
-    effective_port = args.port or config.port
-    settings = _settings_from_hub_config(config)
-    uvicorn.run(create_control_plane_app(settings=settings), host=effective_host, port=effective_port, log_level="info")
+    effective = config.model_copy(
+        update={
+            "host": args.host or config.host,
+            "port": args.port or config.port,
+            "tls_certfile": args.tls_cert or config.tls_certfile,
+            "tls_keyfile": args.tls_key or config.tls_keyfile,
+            "allow_insecure_public_http": args.allow_insecure_public_http or config.allow_insecure_public_http,
+        }
+    )
+    _validate_hub_runtime_security(effective)
+    settings = _settings_from_hub_config(effective)
+    uvicorn.run(
+        create_control_plane_app(settings=settings),
+        host=effective.host,
+        port=effective.port,
+        log_level="info",
+        ssl_certfile=effective.tls_certfile,
+        ssl_keyfile=effective.tls_keyfile,
+    )
 
 
 def hub_doctor_command(args: argparse.Namespace) -> None:
     config = load_hub_config()
     base_settings = get_settings()
-    base_url = args.base_url or f"http://127.0.0.1:{config.port}"
+    base_url = args.base_url or _hub_base_url(config)
     print(f"config:   {hub_config_path()}")
     print(f"listen:   {config.host}:{config.port}")
+    print(f"scheme:   {'https' if _hub_has_tls(config) else 'http'}")
+    print(f"auth:     admin={'set' if config.admin_token else 'missing'} agent={'set' if config.agent_token else 'missing'}")
+    print(f"tls:      {config.tls_certfile if _hub_has_tls(config) else 'disabled'}")
+    print(f"insecure: {'allowed' if config.allow_insecure_public_http else 'blocked'}")
+    print(f"limits:   body={config.max_request_bytes}B nodes={config.max_nodes} clients={config.max_clients}")
     print(f"frontend: {base_settings.frontend_dist} ({'ok' if base_settings.frontend_dist.exists() else 'missing'})")
     try:
         health = _fetch_json(f"{_normalize_base_url(base_url)}/api/health")
         print(f"health:   {health['status']}")
     except SystemExit as exc:
         print(f"health:   unreachable ({exc})")
+
+
+def hub_enroll_command(args: argparse.Namespace) -> None:
+    config = load_hub_config()
+    base_url = _normalize_base_url(args.hub_url or _hub_base_url(config))
+    if args.role == "browser":
+        print(f"Open {base_url} and sign in with this admin token:")
+        print(config.admin_token)
+        return
+    if args.role == "client":
+        print(f'omv client init --hub-url {base_url} --hub-token {config.agent_token}')
+        return
+    print(f'omv host init --hub-url {base_url} --hub-token {config.agent_token}')
+
+
+def hub_rotate_tokens_command(args: argparse.Namespace) -> None:
+    config = load_hub_config()
+    updates: dict[str, str] = {}
+    rotated: list[str] = []
+
+    if args.scope in {"admin", "all"}:
+        updates["admin_token"] = generate_secret()
+        rotated.append("admin")
+    if args.scope in {"agent", "all"}:
+        updates["agent_token"] = generate_secret()
+        rotated.append("agent")
+
+    updated = config.model_copy(update=updates)
+    path = save_hub_config(updated)
+    synced = _sync_local_agent_tokens(updated) if "agent_token" in updates else []
+
+    print(f"Updated hub config at {path}")
+    if "admin_token" in updates:
+        print(f"Admin token: {updated.admin_token}")
+    if "agent_token" in updates:
+        print(f"Agent token: {updated.agent_token}")
+    if synced:
+        print(f"Synced local configs: {', '.join(synced)}")
+    if "agent_token" in updates:
+        print("Re-enroll remote machines with:")
+        print(f"  omv hub enroll host --hub-url {_hub_base_url(updated)}")
+        print(f"  omv hub enroll client --hub-url {_hub_base_url(updated)}")
+    if "admin_token" in updates:
+        print("Browser sign-in token rotated. Existing sessions will need the new admin token.")
 
 
 def hub_service_install_command(args: argparse.Namespace) -> None:
@@ -203,20 +308,33 @@ def hub_service_uninstall_command(args: argparse.Namespace) -> None:
 
 
 def client_init_command(args: argparse.Namespace) -> None:
+    hub_token = args.hub_token or _resolve_local_agent_token(args.hub_url)
+    if not hub_token:
+        raise SystemExit("A hub token is required. Run `omv hub enroll client` on the hub and reuse the printed command.")
+    launcher_token = args.token
+    if not launcher_token and not is_loopback_host(args.host):
+        launcher_token = generate_secret()
+    allow_origins = args.allow_origin or launcher_allow_origins(args.hub_url)
+    if not allow_origins:
+        raise SystemExit("The hub URL must be an http(s) URL so the launcher can trust the correct browser origin.")
     config = ClientConfig(
         hub_url=args.hub_url,
+        hub_token=hub_token,
         host=args.host,
         port=args.port,
         client_id=args.client_id,
         name=args.name,
-        token=args.token,
+        token=launcher_token,
         telemetry_enabled=not args.disable_telemetry,
         telemetry_interval_seconds=args.telemetry_interval,
+        allow_origins=allow_origins,
         moonlight_binary=args.moonlight_binary,
         moonlight_app_name=args.moonlight_app,
     )
     path = save_client_config(config)
     print(f"Wrote client config to {path}")
+    if config.token:
+        print(f"Launcher token: {config.token}")
     print("Optional: omv client install moonlight")
     print("Optional: omv client install tailscale")
     print("Then: omv client start")
@@ -240,6 +358,8 @@ def client_doctor_command(args: argparse.Namespace) -> None:
     print(f"config:     {client_config_path()}")
     print(f"hub:        {config.hub_url}")
     print(f"launcher:   {config.host}:{config.port}")
+    print(f"hub auth:   {'configured' if config.hub_token else 'missing'}")
+    print(f"origins:    {', '.join(config.allow_origins) if config.allow_origins else '-'}")
     print(f"telemetry:  {'enabled' if config.telemetry_enabled else 'disabled'} every {config.telemetry_interval_seconds}s")
     print(f"moonlight:  {detect_tool('moonlight').detail}")
     print(f"tailscale:  {detect_tool('tailscale').detail}")
@@ -263,8 +383,12 @@ def client_service_uninstall_command(args: argparse.Namespace) -> None:
 
 def host_init_command(args: argparse.Namespace) -> None:
     selected_protocols = [ProtocolKind(item) for item in args.protocol] if args.protocol else None
+    hub_token = args.hub_token or _resolve_local_agent_token(args.hub_url)
+    if not hub_token:
+        raise SystemExit("A hub token is required. Run `omv hub enroll host` on the hub and reuse the printed command.")
     config = default_host_config(
         hub_url=args.hub_url,
+        hub_token=hub_token,
         node_id=args.node_id,
         name=args.name,
         overlay_ip=args.overlay_ip,
@@ -313,6 +437,7 @@ def host_doctor_command(args: argparse.Namespace) -> None:
     configured_protocols = ", ".join(protocol.kind.value for protocol in config.protocols) or "-"
     print(f"config:      {host_config_path()}")
     print(f"hub:         {config.hub_url}")
+    print(f"hub auth:    {'configured' if config.hub_token else 'missing'}")
     print(f"node:        {config.node_id} ({config.name})")
     print(f"overlay ip:  {config.overlay_ip}")
     print(f"protocols:   {configured_protocols}")
@@ -356,7 +481,7 @@ def status_command(args: argparse.Namespace) -> None:
     del args
     hub_configured = hub_config_path().exists()
     hub = load_hub_config()
-    hub_health = _probe_status(f"http://127.0.0.1:{hub.port}/api/health", lambda payload: payload.get("status", "ok"))
+    hub_health = _probe_status(f"{_hub_base_url(hub)}/api/health", lambda payload: payload.get("status", "ok"))
     print(
         "hub:        "
         f"configured={'yes' if hub_configured else 'no '} "
@@ -398,7 +523,10 @@ def status_command(args: argparse.Namespace) -> None:
 
 
 def nodes_command(args: argparse.Namespace) -> None:
-    nodes = _fetch_json(f"{_normalize_base_url(_default_base_url(args.base_url))}/api/nodes")
+    nodes = _fetch_json(
+        f"{_normalize_base_url(_default_base_url(args.base_url))}/api/nodes",
+        headers=_admin_headers(args.admin_token, args.base_url),
+    )
     for node in nodes:
         primary = node["protocols"][0]["kind"] if node["protocols"] else "-"
         print(f'{node["node_id"]:20} {node["status"]:8} {primary:10} {node["overlay_ip"]:15} {node["name"]}')
@@ -416,7 +544,10 @@ def capabilities_command(args: argparse.Namespace) -> None:
 
 
 def launch_command(args: argparse.Namespace) -> None:
-    node = _fetch_json(f"{_normalize_base_url(_default_base_url(args.base_url))}/api/nodes/{parse.quote(args.node_id)}")
+    node = _fetch_json(
+        f"{_normalize_base_url(_default_base_url(args.base_url))}/api/nodes/{parse.quote(args.node_id)}",
+        headers=_admin_headers(args.admin_token, args.base_url),
+    )
     protocol = _select_protocol(node, override=args.protocol)
     launcher = LauncherService(get_launcher_settings())
 
@@ -461,9 +592,12 @@ def _select_protocol(node: dict[str, Any], *, override: str | None) -> dict[str,
     raise SystemExit(f'Node "{node["node_id"]}" does not support protocol "{override}".')
 
 
-def _fetch_json(url: str, *, timeout_seconds: float = 5.0) -> Any:
+def _fetch_json(url: str, *, timeout_seconds: float = 5.0, headers: dict[str, str] | None = None) -> Any:
     try:
-        with request.urlopen(request.Request(url, headers={"Accept": "application/json"}), timeout=timeout_seconds) as response:
+        final_headers = {"Accept": "application/json"}
+        if headers:
+            final_headers.update(headers)
+        with request.urlopen(request.Request(ensure_http_url(url), headers=final_headers), timeout=timeout_seconds) as response:  # nosec B310
             return json.load(response)
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
@@ -487,6 +621,11 @@ def _settings_from_hub_config(config: HubConfig) -> Settings:
         poll_interval_seconds=base.poll_interval_seconds,
         cors_origins=tuple(config.cors_origins),
         frontend_dist=base.frontend_dist,
+        admin_token=config.admin_token,
+        agent_token=config.agent_token,
+        max_request_bytes=config.max_request_bytes,
+        max_nodes=config.max_nodes,
+        max_clients=config.max_clients,
     )
 
 
@@ -494,7 +633,7 @@ def _default_base_url(candidate: str | None) -> str:
     if candidate:
         return candidate
     config = load_hub_config()
-    return f"http://127.0.0.1:{config.port}"
+    return _hub_base_url(config)
 
 
 def _package_version() -> str:
@@ -511,6 +650,67 @@ def _probe_status(url: str, extractor) -> str:
     except SystemExit:
         return "unreachable"
     return str(extractor(payload))
+
+
+def _hub_base_url(config: HubConfig) -> str:
+    return f"{'https' if _hub_has_tls(config) else 'http'}://{config.host}:{config.port}"
+
+
+def _hub_has_tls(config: HubConfig) -> bool:
+    return bool(config.tls_certfile and config.tls_keyfile)
+
+
+def _validate_hub_runtime_security(config: HubConfig) -> None:
+    if bool(config.tls_certfile) != bool(config.tls_keyfile):
+        raise SystemExit("Both --tls-cert and --tls-key are required together.")
+    if config.allow_insecure_public_http:
+        return
+    if _hub_has_tls(config):
+        return
+    if requires_tls_for_bind_host(config.host):
+        raise SystemExit(
+            "Refusing to bind the hub on a public or wildcard address over plain HTTP. "
+            "Configure --tls-cert/--tls-key or pass --allow-insecure-public-http explicitly."
+        )
+
+
+def _resolve_local_agent_token(hub_url: str) -> str | None:
+    if not hub_config_path().exists():
+        return None
+    hub = load_hub_config()
+    if _normalize_base_url(hub_url) == _normalize_base_url(_hub_base_url(hub)):
+        return hub.agent_token
+    return None
+
+
+def _admin_headers(explicit_token: str | None, base_url: str | None) -> dict[str, str]:
+    token = explicit_token
+    if not token and hub_config_path().exists():
+        hub = load_hub_config()
+        if _normalize_base_url(_default_base_url(base_url)) == _normalize_base_url(_hub_base_url(hub)):
+            token = hub.admin_token
+    if not token:
+        raise SystemExit("A hub admin token is required. Run `omv hub enroll browser` on the hub and sign in or pass --admin-token.")
+    return {"Authorization": f"{ADMIN_AUTH_SCHEME} {token}"}
+
+
+def _sync_local_agent_tokens(config: HubConfig) -> list[str]:
+    synced: list[str] = []
+    base_url = _normalize_base_url(_hub_base_url(config))
+
+    if client_config_path().exists():
+        client = load_client_config()
+        if _normalize_base_url(client.hub_url) == base_url:
+            save_client_config(client.model_copy(update={"hub_token": config.agent_token}))
+            synced.append("client")
+
+    if host_config_path().exists():
+        host = load_host_config()
+        if _normalize_base_url(host.hub_url) == base_url:
+            save_host_config(host.model_copy(update={"hub_token": config.agent_token}))
+            synced.append("host")
+
+    return synced
 
 
 def _install_service(*, role: str, label: str, description: str, command: list[str]) -> None:

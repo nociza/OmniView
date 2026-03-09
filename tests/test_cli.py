@@ -11,6 +11,7 @@ from omniview.cli import (
     host_init_command,
     host_report_command,
     hub_init_command,
+    hub_rotate_tokens_command,
     launch_command,
     status_command,
 )
@@ -53,7 +54,7 @@ def test_launch_command_dry_run_uses_launcher_service(monkeypatch: pytest.Monkey
                 "host": "100.84.16.10",
                 "port": 47984,
                 "app_name": "Desktop",
-                "launch_uri": "omniview-moonlight://connect?host=100.84.16.10",
+                "launch_uri": "omv-moonlight://connect?host=100.84.16.10",
             }
         ],
     }
@@ -70,17 +71,18 @@ def test_launch_command_dry_run_uses_launcher_service(monkeypatch: pytest.Monkey
                 command=["/Applications/Moonlight.app/Contents/MacOS/Moonlight", "stream", "100.84.16.10", "Desktop"],
             )
 
-    monkeypatch.setattr("omniview.cli._fetch_json", lambda url: node)
+    monkeypatch.setattr("omniview.cli._fetch_json", lambda url, **kwargs: node)
     monkeypatch.setattr("omniview.cli.get_launcher_settings", lambda: object())
     monkeypatch.setattr("omniview.cli.LauncherService", lambda settings: DummyLauncher())
 
     launch_command(
         Namespace(
-            node_id="atlas-bot-lab",
-            base_url="http://127.0.0.1:8000",
-            protocol=None,
-            dry_run=True,
-        )
+                node_id="atlas-bot-lab",
+                base_url="http://127.0.0.1:8000",
+                admin_token="admin-token",
+                protocol=None,
+                dry_run=True,
+            )
     )
 
     output = capsys.readouterr().out
@@ -90,7 +92,16 @@ def test_launch_command_dry_run_uses_launcher_service(monkeypatch: pytest.Monkey
 
 def test_hub_init_writes_role_config(monkeypatch: pytest.MonkeyPatch, tmp_path, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setenv("OMV_CONFIG_DIR", str(tmp_path))
-    hub_init_command(Namespace(host="0.0.0.0", port=8123, cors_origin=["http://localhost:3000"]))
+    hub_init_command(
+        Namespace(
+            host="127.0.0.1",
+            port=8123,
+            cors_origin=["http://localhost:3000"],
+            tls_cert=None,
+            tls_key=None,
+            allow_insecure_public_http=False,
+        )
+    )
 
     config = load_hub_config()
     assert config.port == 8123
@@ -111,10 +122,11 @@ def test_host_init_and_dry_run_report(monkeypatch: pytest.MonkeyPatch, tmp_path,
     monkeypatch.setenv("OMV_CONFIG_DIR", str(tmp_path))
     host_init_command(
         Namespace(
-            hub_url="http://127.0.0.1:8000",
-            node_id="test-host",
-            name="Test Host",
-            overlay_ip="100.64.0.10",
+                hub_url="http://127.0.0.1:8000",
+                hub_token="secret-agent-token",
+                node_id="test-host",
+                name="Test Host",
+                overlay_ip="100.64.0.10",
             location="Rack",
             description="demo",
             tag=["test"],
@@ -139,7 +151,16 @@ def test_host_init_and_dry_run_report(monkeypatch: pytest.MonkeyPatch, tmp_path,
 
 def test_status_command_reports_local_roles(monkeypatch: pytest.MonkeyPatch, tmp_path, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setenv("OMV_CONFIG_DIR", str(tmp_path))
-    hub_init_command(Namespace(host="0.0.0.0", port=8123, cors_origin=[]))
+    hub_init_command(
+        Namespace(
+            host="127.0.0.1",
+            port=8123,
+            cors_origin=[],
+            tls_cert=None,
+            tls_key=None,
+            allow_insecure_public_http=False,
+        )
+    )
     save_client_config(ClientConfig(port=45678))
     (Path(tmp_path) / "host.toml").write_text(
         """
@@ -173,3 +194,60 @@ username = "ops"
     assert "client:" in output
     assert "host:" in output
     assert "tools:" in output
+
+
+def test_hub_init_rejects_public_http_without_explicit_override(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setenv("OMV_CONFIG_DIR", str(tmp_path))
+    with pytest.raises(SystemExit, match="Refusing to bind the hub"):
+        hub_init_command(
+            Namespace(
+                host="0.0.0.0",
+                port=8123,
+                cors_origin=[],
+                tls_cert=None,
+                tls_key=None,
+                allow_insecure_public_http=False,
+            )
+        )
+
+
+def test_hub_rotate_tokens_syncs_local_agent_configs(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setenv("OMV_CONFIG_DIR", str(tmp_path))
+    hub_init_command(
+        Namespace(
+            host="127.0.0.1",
+            port=8000,
+            cors_origin=[],
+            tls_cert=None,
+            tls_key=None,
+            allow_insecure_public_http=False,
+        )
+    )
+    initial_hub = load_hub_config()
+    save_client_config(ClientConfig(hub_url="http://127.0.0.1:8000", hub_token=initial_hub.agent_token))
+    host_init_command(
+        Namespace(
+            hub_url="http://127.0.0.1:8000",
+            hub_token=initial_hub.agent_token,
+            node_id="test-host",
+            name="Test Host",
+            overlay_ip="100.64.0.10",
+            location="Rack",
+            description="demo",
+            tag=["test"],
+            headless=True,
+            protocol=["ssh"],
+            report_interval=15,
+            screenshot_interval=30,
+            no_screenshots=True,
+        )
+    )
+
+    hub_rotate_tokens_command(Namespace(scope="agent"))
+
+    rotated_hub = load_hub_config()
+    rotated_host = load_host_config()
+    rotated_client = get_launcher_settings()
+    assert rotated_hub.agent_token != initial_hub.agent_token
+    assert rotated_host.hub_token == rotated_hub.agent_token
+    assert rotated_client.hub_token == rotated_hub.agent_token

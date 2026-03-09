@@ -16,6 +16,7 @@ from omniview.launcher.config import LauncherSettings
 from omniview.launcher.service import LauncherService
 from omniview.models import ClientProfile, ClientReport, NodePlatform, TelemetryMetrics, TelemetryPayload
 from omniview.role_config import detect_overlay_ip, slugify
+from omniview.security import AGENT_TOKEN_HEADER, ensure_http_url
 from omniview.telemetry import NetworkRateSampler, load_average, network_latency_ms, nvidia_gpu_metrics, power_watts, temperature_celsius, uptime_seconds
 
 
@@ -92,12 +93,15 @@ class ClientTelemetryCollector:
 
     def post_once(self) -> ClientReport:
         report = self.build_report()
-        url = f"{self.settings.hub_url.rstrip('/')}/api/clients/report"
+        url = ensure_http_url(f"{self.settings.hub_url.rstrip('/')}/api/clients/report")
         payload = report.model_dump(mode="json", exclude_none=True)
         body = json.dumps(payload).encode("utf-8")
-        req = request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        headers = {"Content-Type": "application/json"}
+        if self.settings.hub_token:
+            headers[AGENT_TOKEN_HEADER] = self.settings.hub_token
+        req = request.Request(url, data=body, headers=headers, method="POST")
         try:
-            with request.urlopen(req, timeout=15) as response:
+            with request.urlopen(req, timeout=15) as response:  # nosec B310
                 response.read()
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")

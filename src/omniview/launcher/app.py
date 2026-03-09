@@ -13,6 +13,7 @@ from omniview.client_telemetry import ClientRuntimeState, ClientTelemetryCollect
 from omniview.launcher.config import LauncherSettings, get_launcher_settings
 from omniview.launcher.models import AUTH_HEADER, LaunchRequest, LaunchResponse, LauncherStatusResponse
 from omniview.launcher.service import LauncherService, LauncherUnsupportedError
+from omniview.security import is_loopback_host
 
 
 class LauncherHealthResponse(BaseModel):
@@ -25,6 +26,7 @@ def create_app(
     service: LauncherService | None = None,
 ) -> FastAPI:
     app_settings = settings or get_launcher_settings()
+    _validate_launcher_security(app_settings)
     runtime = ClientRuntimeState(max_entries=app_settings.log_retention)
     launcher_service = service or LauncherService(
         app_settings,
@@ -45,13 +47,13 @@ def create_app(
             if reporter is not None:
                 reporter.stop()
 
-    app = FastAPI(title="OMV Native Client", version="0.2.1", lifespan=lifespan)
+    app = FastAPI(title="OMV Native Client", version="0.3.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=list(app_settings.allow_origins) or ["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=list(app_settings.allow_origins),
+        allow_credentials=False,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type", AUTH_HEADER],
     )
 
     app.state.settings = app_settings
@@ -71,6 +73,7 @@ def create_app(
     def launch(
         payload: LaunchRequest,
         request: Request,
+        _origin: None = Depends(require_allowed_origin),
         _token: None = Depends(require_token),
     ) -> LaunchResponse:
         launcher: LauncherService = request.app.state.service
@@ -91,6 +94,22 @@ def require_token(
     settings: LauncherSettings = request.app.state.settings
     if settings.token and x_omv_token != settings.token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Launcher token mismatch.")
+
+
+def require_allowed_origin(request: Request) -> None:
+    origin = request.headers.get("origin")
+    if not origin:
+        return
+    settings: LauncherSettings = request.app.state.settings
+    if origin not in settings.allow_origins:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser origin not allowed.")
+
+
+def _validate_launcher_security(settings: LauncherSettings) -> None:
+    if not is_loopback_host(settings.host) and not settings.token:
+        raise RuntimeError("A launcher token is required when the native client is bound to a non-loopback address.")
+    if not settings.allow_origins:
+        raise RuntimeError("At least one allowed launcher origin must be configured.")
 
 
 app = create_app()

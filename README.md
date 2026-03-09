@@ -60,7 +60,7 @@ uv tool uninstall omv
 On the machine that should host the dashboard:
 
 ```bash
-omv hub init --host 0.0.0.0 --port 8000
+omv hub init --port 8000
 omv hub start
 ```
 
@@ -70,14 +70,42 @@ Optional background service:
 omv hub service-install
 ```
 
-Open `http://127.0.0.1:8000` locally or the machine's overlay-network IP from another device.
+`omv hub init` now generates:
+
+- a secure default bind address: Tailscale IP when available, otherwise `127.0.0.1`
+- an admin token for the dashboard and CLI read access
+- an agent token for hosts and clients to report telemetry
+- public-bind guardrails: wildcard or public binds require TLS unless you explicitly opt out
+
+Bootstrap another machine with:
+
+```bash
+omv hub enroll host
+omv hub enroll client
+omv hub enroll browser
+```
+
+The browser session is protected. Open the hub URL and sign in with the admin token printed by `omv hub init` or `omv hub enroll browser`.
+
+If you need to bind the hub publicly, configure TLS at init time:
+
+```bash
+omv hub init --host 0.0.0.0 --tls-cert /path/to/fullchain.pem --tls-key /path/to/privkey.pem
+omv hub start
+```
+
+If you intentionally want plain HTTP on a wildcard or public bind, you must opt into it:
+
+```bash
+omv hub init --host 0.0.0.0 --allow-insecure-public-http
+```
 
 ### 2. Set up a native client
 
 On any machine that should open native apps when you click `Launch` in the dashboard:
 
 ```bash
-omv client init --hub-url http://YOUR-HUB:8000
+omv client init --hub-url http://YOUR-HUB:8000 --hub-token YOUR_AGENT_TOKEN
 omv client install moonlight
 omv client start
 ```
@@ -88,18 +116,27 @@ Optional background service:
 omv client service-install
 ```
 
-If the hub and the viewing machine are the same box, run both `hub` and `client` there.
+If the hub and the viewing machine are the same box, `omv client init` can reuse the local hub agent token automatically.
 
 The client service now reports viewer-side telemetry to the hub: CPU, memory, load average, network throughput, latency to the hub, best-effort GPU/power data, and recent launcher errors/logs.
+
+The local launcher is now locked down by default:
+
+- loopback bind by default
+- strict browser origin allowlist derived from the hub URL
+- no wildcard CORS
+- launcher token required automatically if you bind it to a non-loopback address
 
 ### 3. Set up a host
 
 On each machine you want to monitor:
 
 ```bash
-omv host init --hub-url http://YOUR-HUB:8000
+omv host init --hub-url http://YOUR-HUB:8000 --hub-token YOUR_AGENT_TOKEN
 omv host start
 ```
+
+If the host machine is also the hub machine, `omv host init` can reuse the local hub agent token automatically.
 
 For Linux hosts that should stream over Moonlight:
 
@@ -121,7 +158,7 @@ One machine can run both the hub and the native client:
 
 ```bash
 omv hub init
-omv client init
+omv client init --hub-url http://127.0.0.1:8000
 omv hub service-install
 omv client service-install
 ```
@@ -135,7 +172,7 @@ omv status
 Example output:
 
 ```text
-hub:        configured=yes listen=0.0.0.0:8000 health=ok
+hub:        configured=yes listen=100.x.y.z:8000 health=ok
 client:     configured=yes listen=127.0.0.1:32145 service=darwin
 host:       configured=no
 tools:      moonlight=yes sunshine=no tailscale=yes
@@ -149,22 +186,32 @@ omv client doctor
 omv host doctor
 ```
 
+### Rotate hub secrets
+
+```bash
+omv hub rotate-tokens
+omv hub rotate-tokens agent
+omv hub rotate-tokens admin
+```
+
+Rotating the agent token automatically rewrites local `client.toml` and `host.toml` when they point at the same hub. Remote machines must be re-enrolled with `omv hub enroll host` or `omv hub enroll client`.
+
 ### List nodes from the hub
 
 ```bash
-omv nodes --base-url http://127.0.0.1:8000
+omv nodes --base-url http://127.0.0.1:8000 --admin-token YOUR_ADMIN_TOKEN
 ```
 
 ### Launch a node from the terminal
 
 ```bash
-omv launch atlas-bot-lab --base-url http://127.0.0.1:8000
+omv launch atlas-bot-lab --base-url http://127.0.0.1:8000 --admin-token YOUR_ADMIN_TOKEN
 ```
 
 ### Dry-run a launch
 
 ```bash
-omv launch atlas-bot-lab --base-url http://127.0.0.1:8000 --dry-run
+omv launch atlas-bot-lab --base-url http://127.0.0.1:8000 --admin-token YOUR_ADMIN_TOKEN --dry-run
 ```
 
 ## Config files
@@ -179,7 +226,7 @@ Use the CLI to create them instead of hand-writing them:
 
 ```bash
 omv hub init
-omv client init
+omv client init --hub-url http://127.0.0.1:8000
 omv host init --hub-url http://127.0.0.1:8000
 ```
 
@@ -218,6 +265,10 @@ omv host install tailscale
 A few steps still depend on the target platform and cannot be fully automated away:
 
 - Tailscale still needs user authentication, usually via `tailscale up`
+- OMV now avoids `curl | sh` and unsigned release downloads in its install path. The CLI only uses system package managers such as Homebrew, winget, `apt-get`, `dnf`, or `pacman`.
+- The hub API is authenticated by default. Hosts and clients use the agent token; dashboards and CLI reads use the admin token.
+- Config files are written with restricted permissions on POSIX systems.
+- The hub enforces request-size limits and caps the number of tracked nodes and clients in memory.
 - Sunshine still needs its own permissions and pairing flow with Moonlight
 - macOS VNC requires Screen Sharing or Remote Management to be enabled
 - macOS screenshot capture may require Screen Recording permission for the host agent

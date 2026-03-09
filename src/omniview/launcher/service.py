@@ -7,6 +7,7 @@ import shlex
 import shutil
 import subprocess
 from typing import Callable
+from urllib.parse import urlsplit
 
 from omniview.launcher.config import LauncherSettings
 from omniview.launcher.models import LaunchRequest, LaunchResponse, LauncherStatusResponse, ProtocolCapability
@@ -108,17 +109,19 @@ class LauncherService:
             return self._moonlight_plan(request)
         if request.protocol is ProtocolKind.VNC:
             return self._open_url_plan(
-                request.launch_uri or self._default_uri(request.protocol, host=self._host(request), port=request.port, path=request.path, username=request.username),
+                self._default_uri(request.protocol, host=self._host(request), port=request.port, path=request.path, username=request.username),
                 strategy="url-opener",
                 detail="Opening the native VNC handler for the selected node.",
+                allowed_schemes={"vnc"},
             )
         if request.protocol is ProtocolKind.SSH:
             return self._ssh_plan(request)
         if request.protocol is ProtocolKind.GUACAMOLE:
             return self._open_url_plan(
-                request.launch_uri or self._default_uri(request.protocol, host=self._host(request), port=request.port, path=request.path, username=request.username),
+                self._default_uri(request.protocol, host=self._host(request), port=request.port, path=request.path, username=request.username),
                 strategy="browser-opener",
                 detail="Opening the browser fallback for the selected node.",
+                allowed_schemes={"https"},
             )
         raise LauncherUnsupportedError(f"Unsupported protocol '{request.protocol.value}'.")
 
@@ -128,17 +131,17 @@ class LauncherService:
             return None
 
         formatted = template.format(
-            protocol=request.protocol.value,
-            node_id=request.node_id or "",
-            node_name=request.node_name,
-            host=self._host(request),
-            overlay_ip=request.overlay_ip,
-            port=request.port or self._default_port(request.protocol) or "",
-            username=request.username or "",
-            path=request.path or "",
-            app_name=request.app_name or self.settings.moonlight_app_name,
-            launch_uri=request.launch_uri or "",
-            target=self._ssh_target(request),
+            protocol=self._template_value(request.protocol.value),
+            node_id=self._template_value(request.node_id or ""),
+            node_name=self._template_value(request.node_name),
+            host=self._template_value(self._host(request)),
+            overlay_ip=self._template_value(request.overlay_ip),
+            port=self._template_value(str(request.port or self._default_port(request.protocol) or "")),
+            username=self._template_value(request.username or ""),
+            path=self._template_value(request.path or ""),
+            app_name=self._template_value(request.app_name or self.settings.moonlight_app_name),
+            launch_uri=self._template_value(request.launch_uri or ""),
+            target=self._template_value(self._ssh_target(request)),
         )
         return ExecutionPlan(
             strategy="template",
@@ -211,9 +214,11 @@ class LauncherService:
 
         raise LauncherUnsupportedError(f"SSH launching is not implemented for platform '{self.system_name}'.")
 
-    def _open_url_plan(self, url: str | None, *, strategy: str, detail: str) -> ExecutionPlan:
+    def _open_url_plan(self, url: str | None, *, strategy: str, detail: str, allowed_schemes: set[str]) -> ExecutionPlan:
         if not url:
             raise LauncherUnsupportedError("No launch URL was available for this protocol.")
+        if urlsplit(url).scheme not in allowed_schemes:
+            raise LauncherUnsupportedError("Launcher rejected an unsafe URL scheme.")
 
         if self.system_name == "darwin":
             if self.which("open") is None:
@@ -288,6 +293,11 @@ class LauncherService:
 
     def _host(self, request: LaunchRequest) -> str:
         return request.host or request.overlay_ip
+
+    def _template_value(self, value: str) -> str:
+        if self.system_name == "windows":
+            return subprocess.list2cmdline([value])
+        return shlex.quote(value)
 
     def _record_info(self, message: str) -> None:
         if self.on_info is not None:

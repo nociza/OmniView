@@ -88,6 +88,10 @@ export interface DashboardResponse {
   poll_interval_seconds: number;
 }
 
+export interface SessionStatusResponse {
+  authenticated: boolean;
+}
+
 export interface ProtocolCapability {
   kind: ProtocolKind;
   available: boolean;

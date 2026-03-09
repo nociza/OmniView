@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchDashboard } from '../api/client';
+import { ApiError, fetchDashboard } from '../api/client';
 import type { DashboardResponse } from '../types';
 
 interface UseDashboardResult {
@@ -10,7 +10,7 @@ interface UseDashboardResult {
   refresh: () => Promise<void>;
 }
 
-export function useDashboard(): UseDashboardResult {
+export function useDashboard(enabled: boolean, onUnauthorized: () => void): UseDashboardResult {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -18,6 +18,12 @@ export function useDashboard(): UseDashboardResult {
   const inflightRef = useRef(false);
 
   const load = useCallback(async (background = false) => {
+    if (!enabled) {
+      setData(null);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     if (inflightRef.current) {
       return;
     }
@@ -36,6 +42,10 @@ export function useDashboard(): UseDashboardResult {
       setData(next);
       setError(null);
     } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setData(null);
+        onUnauthorized();
+      }
       if ((err as Error).name !== 'AbortError') {
         setError(err instanceof Error ? err.message : 'Unable to load dashboard');
       }
@@ -44,7 +54,7 @@ export function useDashboard(): UseDashboardResult {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [enabled, onUnauthorized]);
 
   useEffect(() => {
     void load(false);

@@ -3,8 +3,8 @@ import { fetchLauncherStatus, launchViaLocalService } from '../api/launcherClien
 import type { LaunchRequestPayload, LaunchResponse, LauncherStatusResponse, NodeView, ProtocolCapability, ProtocolLaunch, ProtocolKind } from '../types';
 
 const STORAGE_KEYS = {
-  baseUrl: 'omniview.launcher.baseUrl',
-  token: 'omniview.launcher.token',
+  baseUrl: 'omv.launcher.baseUrl',
+  token: 'omv.launcher.token',
 } as const;
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:32145';
@@ -33,11 +33,25 @@ function readStorage(key: string, fallback: string): string {
   return window.localStorage.getItem(key) ?? fallback;
 }
 
+function readSession(key: string, fallback: string): string {
+  if (typeof window === 'undefined') {
+    return fallback;
+  }
+  return window.sessionStorage.getItem(key) ?? fallback;
+}
+
 function writeStorage(key: string, value: string): void {
   if (typeof window === 'undefined') {
     return;
   }
   window.localStorage.setItem(key, value);
+}
+
+function writeSession(key: string, value: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.sessionStorage.setItem(key, value);
 }
 
 function buildLaunchPayload(node: NodeView, protocol: ProtocolLaunch): LaunchRequestPayload {
@@ -60,7 +74,7 @@ function buildLaunchPayload(node: NodeView, protocol: ProtocolLaunch): LaunchReq
 export function useLauncher(): UseLauncherResult {
   const [settings, setSettings] = useState<LauncherSettingsState>(() => ({
     baseUrl: readStorage(STORAGE_KEYS.baseUrl, DEFAULT_BASE_URL),
-    token: readStorage(STORAGE_KEYS.token, ''),
+    token: readSession(STORAGE_KEYS.token, ''),
   }));
   const [status, setStatus] = useState<LauncherStatusResponse | null>(null);
   const [probing, setProbing] = useState(true);
@@ -87,7 +101,7 @@ export function useLauncher(): UseLauncherResult {
 
   const saveSettings = useCallback(async (baseUrl: string, token: string) => {
     writeStorage(STORAGE_KEYS.baseUrl, baseUrl);
-    writeStorage(STORAGE_KEYS.token, token);
+    writeSession(STORAGE_KEYS.token, token);
     setSettings({ baseUrl, token });
     setProbing(true);
     try {

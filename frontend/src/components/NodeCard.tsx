@@ -1,4 +1,5 @@
 import { formatMemory, formatPercent, formatRelativeAge, formatTemperature, platformLabel } from '../lib/format';
+import { safeThumbnailUrl } from '../lib/safety';
 import type { NodeView } from '../types';
 import { StatusBadge } from './StatusBadge';
 
@@ -10,12 +11,13 @@ interface NodeCardProps {
 
 export function NodeCard({ node, selected, onSelect }: NodeCardProps) {
   const metrics = node.telemetry?.metrics;
+  const thumbnailUrl = safeThumbnailUrl(node.telemetry?.thumbnail_data_url);
 
   return (
     <button type="button" className={`node-card ${selected ? 'node-card--selected' : ''}`} onClick={() => onSelect(node.node_id)}>
       <div
         className="node-card__thumbnail"
-        style={node.telemetry?.thumbnail_data_url ? { backgroundImage: `url(${node.telemetry.thumbnail_data_url})` } : undefined}
+        style={thumbnailUrl ? { backgroundImage: `url(${thumbnailUrl})` } : undefined}
       >
         <div className="node-card__overlay">
           <StatusBadge status={node.status} />

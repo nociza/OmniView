@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ClientCard } from './components/ClientCard';
 import { ClientDetail } from './components/ClientDetail';
+import { HubAccess } from './components/HubAccess';
 import { LauncherStatus } from './components/LauncherStatus';
 import { NodeCard } from './components/NodeCard';
 import { NodeDetail } from './components/NodeDetail';
 import { SummaryStrip } from './components/SummaryStrip';
 import { useDashboard } from './hooks/useDashboard';
+import { useHubSession } from './hooks/useHubSession';
 import { useLauncher } from './hooks/useLauncher';
 
 function App() {
-  const { data, loading, refreshing, error, refresh } = useDashboard();
+  const session = useHubSession();
+  const { data, loading, refreshing, error, refresh } = useDashboard(session.authenticated, session.invalidate);
   const launcher = useLauncher();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -49,7 +52,7 @@ function App() {
     <div className="app-shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">OmniView</p>
+          <p className="eyebrow">OMV</p>
           <h1>One control plane for every box on the mesh.</h1>
           <p className="hero__copy">
             Observe hardware health, confirm each desktop is still rendering, and hand off into the right native client without typing an IP or hunting for the binary.
@@ -66,7 +69,11 @@ function App() {
         </div>
       </header>
 
-      {data ? (
+      {!session.authenticated ? (
+        <HubAccess checking={session.checking} error={session.error} onLogin={session.login} />
+      ) : null}
+
+      {data && session.authenticated ? (
         <SummaryStrip
           summary={data.summary}
           clientCount={data.clients.length}
@@ -76,22 +83,25 @@ function App() {
         />
       ) : null}
 
-      <LauncherStatus
-        baseUrl={launcher.settings.baseUrl}
-        token={launcher.settings.token}
-        status={launcher.status}
-        connected={launcher.connected}
-        probing={launcher.probing}
-        error={launcher.error}
-        onSave={launcher.saveSettings}
-        onProbe={launcher.probe}
-      />
+      {session.authenticated ? (
+        <LauncherStatus
+          baseUrl={launcher.settings.baseUrl}
+          token={launcher.settings.token}
+          status={launcher.status}
+          connected={launcher.connected}
+          probing={launcher.probing}
+          error={launcher.error}
+          onSave={launcher.saveSettings}
+          onProbe={launcher.probe}
+          onLogout={session.logout}
+        />
+      ) : null}
 
-      {error ? <div className="banner banner--error">{error}</div> : null}
+      {error && session.authenticated ? <div className="banner banner--error">{error}</div> : null}
 
-      {loading && !data ? <div className="banner">Loading dashboard…</div> : null}
+      {loading && !data && session.authenticated ? <div className="banner">Loading dashboard…</div> : null}
 
-      <main className="workspace">
+      {session.authenticated ? <main className="workspace">
         <section className="fleet-column">
           <div className="section-heading">
             <div>
@@ -107,9 +117,9 @@ function App() {
           </div>
         </section>
         <NodeDetail node={selectedNode} launcher={launcher} />
-      </main>
+      </main> : null}
 
-      <section className="workspace workspace--clients">
+      {session.authenticated ? <section className="workspace workspace--clients">
         <section className="fleet-column">
           <div className="section-heading">
             <div>
@@ -125,7 +135,7 @@ function App() {
           </div>
         </section>
         <ClientDetail client={selectedClient} />
-      </section>
+      </section> : null}
     </div>
   );
 }

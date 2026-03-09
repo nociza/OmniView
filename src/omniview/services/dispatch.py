@@ -46,7 +46,7 @@ def _build_launch_uri(*, name: str, overlay_ip: str, protocol: ProtocolSpec) -> 
             "port": protocol.port or 47984,
             "name": name,
         })
-        return f"omniview-moonlight://connect?{query}"
+        return f"omv-moonlight://connect?{query}"
 
     if protocol.kind is ProtocolKind.VNC:
         port = protocol.port or 5900
@@ -59,8 +59,6 @@ def _build_launch_uri(*, name: str, overlay_ip: str, protocol: ProtocolSpec) -> 
 
     if protocol.kind is ProtocolKind.GUACAMOLE:
         path = protocol.path or "/guacamole"
-        if path.startswith("http://") or path.startswith("https://"):
-            return path
         return f"https://{overlay_ip}{path}"
 
     return None

@@ -1,1 +1,1 @@
-"""OmniView control plane package."""
+"""OMV control plane package."""

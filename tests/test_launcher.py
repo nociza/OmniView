@@ -20,6 +20,7 @@ class DummyRunner(CommandRunner):
 def make_settings(tmp_path: Path, *, token: str | None = None) -> LauncherSettings:
     return LauncherSettings(
         hub_url='http://127.0.0.1:8000',
+        hub_token='agent-token',
         host='127.0.0.1',
         port=32145,
         client_id='viewer-client',

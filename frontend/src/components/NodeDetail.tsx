@@ -7,6 +7,7 @@ import {
   formatThroughput,
   platformLabel,
 } from '../lib/format';
+import { safeLaunchUri, safeThumbnailUrl } from '../lib/safety';
 import type { LaunchResponse, NodeView, ProtocolCapability, ProtocolLaunch, ProtocolKind } from '../types';
 import { StatusBadge } from './StatusBadge';
 
@@ -29,7 +30,7 @@ function protocolHint(protocol: ProtocolLaunch, capability: ProtocolCapability |
     return capability.detail;
   }
   if (protocol.kind === 'moonlight') {
-    return 'Requires the local OmniView launcher to invoke Moonlight directly on this viewing device.';
+    return 'Requires the local OMV launcher to invoke Moonlight directly on this viewing device.';
   }
   if (protocol.kind === 'guacamole') {
     return 'Browser fallback. This can still open via URL handler even when the local launcher is offline.';
@@ -83,8 +84,9 @@ export function NodeDetail({ node, launcher }: NodeDetailProps) {
         return;
       }
 
-      if (protocol.launch_uri) {
-        window.location.assign(protocol.launch_uri);
+      const fallbackUri = safeLaunchUri(protocol.launch_uri);
+      if (fallbackUri) {
+        window.location.assign(fallbackUri);
         setLaunchMessage(`Local launcher unavailable for ${protocol.label}. Falling back to the OS URL handler.`);
         return;
       }
@@ -107,9 +109,11 @@ export function NodeDetail({ node, launcher }: NodeDetailProps) {
     );
   }
 
+  const thumbnailUrl = safeThumbnailUrl(node.telemetry?.thumbnail_data_url);
+
   return (
     <aside className="detail-panel">
-      <div className="detail-panel__thumbnail" style={node.telemetry?.thumbnail_data_url ? { backgroundImage: `url(${node.telemetry.thumbnail_data_url})` } : undefined}>
+      <div className="detail-panel__thumbnail" style={thumbnailUrl ? { backgroundImage: `url(${thumbnailUrl})` } : undefined}>
         <div className="detail-panel__scrim">
           <StatusBadge status={node.status} />
           <p>{node.telemetry?.render_state ?? 'No render-state annotation provided.'}</p>

@@ -10,6 +10,7 @@ interface LauncherStatusProps {
   error: string | null;
   onSave: (baseUrl: string, token: string) => Promise<void>;
   onProbe: () => Promise<void>;
+  onLogout: () => Promise<void>;
 }
 
 export function LauncherStatus({
@@ -21,6 +22,7 @@ export function LauncherStatus({
   error,
   onSave,
   onProbe,
+  onLogout,
 }: LauncherStatusProps) {
   const [draftBaseUrl, setDraftBaseUrl] = useState(baseUrl);
   const [draftToken, setDraftToken] = useState(token);
@@ -46,9 +48,14 @@ export function LauncherStatus({
         <span className={`launcher-state launcher-state--${connected ? 'ready' : 'offline'}`}>
           {connected ? 'Launcher connected' : 'Launcher unavailable'}
         </span>
-        <button type="button" className="ghost-button" onClick={() => void onProbe()} disabled={probing}>
-          {probing ? 'Checking…' : 'Recheck'}
-        </button>
+        <div className="launcher-panel__status-actions">
+          <button type="button" className="ghost-button" onClick={() => void onProbe()} disabled={probing}>
+            {probing ? 'Checking…' : 'Recheck'}
+          </button>
+          <button type="button" className="ghost-button" onClick={() => void onLogout()}>
+            Sign out
+          </button>
+        </div>
       </div>
       <div className="launcher-panel__form">
         <label>
@@ -57,7 +64,7 @@ export function LauncherStatus({
         </label>
         <label>
           <span>Token</span>
-          <input value={draftToken} onChange={(event) => setDraftToken(event.target.value)} placeholder="Optional launcher token" />
+          <input value={draftToken} onChange={(event) => setDraftToken(event.target.value)} placeholder="Advanced launcher token" />
         </label>
         <button type="button" className="launcher-panel__save" onClick={() => void onSave(draftBaseUrl, draftToken)}>
           Save and probe

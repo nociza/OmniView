@@ -46,6 +46,7 @@ class NodeRegistry:
             registered_at = existing.registered_at if existing else now
             record = NodeRecord(profile=profile, telemetry=telemetry, registered_at=registered_at, last_seen_at=now)
             self._records[profile.node_id] = record
+            self._prune_nodes()
             return self._build_view(record, now)
 
     def record_telemetry(self, node_id: str, telemetry: TelemetryPayload) -> NodeView:
@@ -70,6 +71,7 @@ class NodeRegistry:
                 last_seen_at=now,
             )
             self._records[report.profile.node_id] = record
+            self._prune_nodes()
             return self._build_view(record, now)
 
     def ingest_client_report(self, report: ClientReport) -> ClientView:
@@ -84,6 +86,7 @@ class NodeRegistry:
                 last_seen_at=now,
             )
             self._clients[report.profile.client_id] = record
+            self._prune_clients()
             return self._build_client_view(record, now)
 
     def list_nodes(self) -> list[NodeView]:
@@ -211,3 +214,17 @@ class NodeRegistry:
     def _sort_client_key(client: ClientView) -> tuple[int, int, str]:
         telemetry_priority = 0 if client.telemetry is not None else 1
         return (_STATUS_ORDER[client.status], telemetry_priority, client.name.lower())
+
+    def _prune_nodes(self) -> None:
+        overflow = len(self._records) - self._settings.max_nodes
+        if overflow <= 0:
+            return
+        for node_id, _record in sorted(self._records.items(), key=lambda item: item[1].last_seen_at)[:overflow]:
+            self._records.pop(node_id, None)
+
+    def _prune_clients(self) -> None:
+        overflow = len(self._clients) - self._settings.max_clients
+        if overflow <= 0:
+            return
+        for client_id, _record in sorted(self._clients.items(), key=lambda item: item[1].last_seen_at)[:overflow]:
+            self._clients.pop(client_id, None)

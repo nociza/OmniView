@@ -3,13 +3,22 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from omniview.main import app
+from omniview.security import ADMIN_AUTH_SCHEME, AGENT_TOKEN_HEADER
 
 
 client = TestClient(app)
 
 
+def admin_headers() -> dict[str, str]:
+    return {"Authorization": f"{ADMIN_AUTH_SCHEME} {app.state.settings.admin_token}"}
+
+
+def agent_headers() -> dict[str, str]:
+    return {AGENT_TOKEN_HEADER: app.state.settings.agent_token}
+
+
 def test_dashboard_seed_data_is_available() -> None:
-    response = client.get("/api/dashboard")
+    response = client.get("/api/dashboard", headers=admin_headers())
     assert response.status_code == 200
 
     payload = response.json()
@@ -59,13 +68,13 @@ def test_agent_report_upserts_node_and_launch_uri() -> None:
         },
     }
 
-    response = client.post("/api/agent/report", json=payload)
+    response = client.post("/api/agent/report", json=payload, headers=agent_headers())
     assert response.status_code == 202
     node = response.json()
     assert node["node_id"] == "integration-box"
-    assert node["protocols"][0]["launch_uri"].startswith("omniview-moonlight://")
+    assert node["protocols"][0]["launch_uri"].startswith("omv-moonlight://")
 
-    lookup = client.get("/api/nodes/integration-box")
+    lookup = client.get("/api/nodes/integration-box", headers=admin_headers())
     assert lookup.status_code == 200
     assert lookup.json()["telemetry"]["metrics"]["cpu_percent"] == 14.2
 
@@ -73,6 +82,7 @@ def test_agent_report_upserts_node_and_launch_uri() -> None:
 def test_unknown_node_telemetry_returns_404() -> None:
     response = client.post(
         "/api/nodes/missing-node/telemetry",
+        headers=agent_headers(),
         json={
             "metrics": {
                 "cpu_percent": 10,
@@ -93,7 +103,7 @@ def test_client_report_upserts_viewer_client() -> None:
             "platform": "macos",
             "hub_url": "http://100.64.8.21:8000",
             "launcher_url": "http://127.0.0.1:32145",
-            "app_version": "omv-0.2.1",
+            "app_version": "omv-0.3.0",
             "capabilities": [
                 {"kind": "moonlight", "available": True, "strategy": "moonlight-cli", "detail": "Moonlight installed locally."},
                 {"kind": "ssh", "available": True, "strategy": "terminal-applescript", "detail": "Terminal SSH handoff available."},
@@ -118,12 +128,19 @@ def test_client_report_upserts_viewer_client() -> None:
         },
     }
 
-    response = client.post("/api/clients/report", json=payload)
+    response = client.post("/api/clients/report", json=payload, headers=agent_headers())
     assert response.status_code == 202
     viewer = response.json()
     assert viewer["client_id"] == "road-warrior-client"
     assert viewer["capabilities"][0]["kind"] == "moonlight"
 
-    lookup = client.get("/api/clients/road-warrior-client")
+    lookup = client.get("/api/clients/road-warrior-client", headers=admin_headers())
     assert lookup.status_code == 200
     assert lookup.json()["telemetry"]["metrics"]["network_latency_ms"] == 31.4
+
+
+def test_session_login_sets_cookie_for_dashboard() -> None:
+    session = client.post("/api/session", json={"token": app.state.settings.admin_token})
+    assert session.status_code == 200
+    response = client.get("/api/dashboard")
+    assert response.status_code == 200

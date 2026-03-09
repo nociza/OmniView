@@ -1,1 +1,1 @@
-"""Local viewer-side launcher for OmniView."""
+"""Local viewer-side launcher for OMV."""

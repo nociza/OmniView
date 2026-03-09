@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import Enum
+from typing import Annotated
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, field_validator
+
+
+SmallText = Annotated[str, Field(max_length=160)]
+LogLine = Annotated[str, Field(max_length=400)]
+TagText = Annotated[str, Field(max_length=32)]
 
 
 class NodePlatform(str, Enum):
@@ -27,14 +33,25 @@ class ProtocolKind(str, Enum):
 
 class ProtocolSpec(BaseModel):
     kind: ProtocolKind
-    label: str
+    label: SmallText
     priority: int = 100
     port: int | None = Field(default=None, ge=1, le=65535)
-    path: str | None = None
-    username: str | None = None
-    app_name: str | None = None
-    note: str | None = None
+    path: str | None = Field(default=None, max_length=160)
+    username: str | None = Field(default=None, max_length=64)
+    app_name: str | None = Field(default=None, max_length=80)
+    note: str | None = Field(default=None, max_length=240)
     enabled: bool = True
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if value.startswith(("http://", "https://")):
+            raise ValueError("Absolute URLs are not allowed in protocol paths.")
+        if value and not value.startswith("/"):
+            return f"/{value}"
+        return value
 
 
 class TelemetryMetrics(BaseModel):
@@ -58,12 +75,21 @@ class TelemetryMetrics(BaseModel):
 class TelemetryPayload(BaseModel):
     reported_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     metrics: TelemetryMetrics
-    thumbnail_data_url: str | None = None
-    render_state: str | None = None
-    active_session: str | None = None
-    collector_notes: list[str] = Field(default_factory=list)
-    recent_logs: list[str] = Field(default_factory=list)
-    recent_errors: list[str] = Field(default_factory=list)
+    thumbnail_data_url: str | None = Field(default=None, max_length=1_000_000)
+    render_state: str | None = Field(default=None, max_length=120)
+    active_session: str | None = Field(default=None, max_length=120)
+    collector_notes: list[SmallText] = Field(default_factory=list, max_length=16)
+    recent_logs: list[LogLine] = Field(default_factory=list, max_length=32)
+    recent_errors: list[LogLine] = Field(default_factory=list, max_length=16)
+
+    @field_validator("thumbnail_data_url")
+    @classmethod
+    def validate_thumbnail(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not value.startswith("data:image/"):
+            raise ValueError("Only data:image thumbnails are allowed.")
+        return value
 
 
 class NodeProfile(BaseModel):
@@ -72,12 +98,12 @@ class NodeProfile(BaseModel):
     hostname: str = Field(min_length=1, max_length=255)
     overlay_ip: str = Field(min_length=3, max_length=255)
     platform: NodePlatform
-    description: str | None = None
-    location: str | None = None
-    tags: list[str] = Field(default_factory=list)
+    description: str | None = Field(default=None, max_length=240)
+    location: str | None = Field(default=None, max_length=120)
+    tags: list[TagText] = Field(default_factory=list, max_length=16)
     headless: bool = False
-    agent_version: str | None = None
-    protocols: list[ProtocolSpec] = Field(default_factory=list)
+    agent_version: str | None = Field(default=None, max_length=40)
+    protocols: list[ProtocolSpec] = Field(default_factory=list, max_length=8)
 
     @computed_field(return_type=ProtocolKind | None)
     @property
@@ -88,25 +114,25 @@ class NodeProfile(BaseModel):
 
 class ProtocolLaunch(BaseModel):
     kind: ProtocolKind
-    label: str
+    label: SmallText
     priority: int
     host: str
     port: int | None = Field(default=None, ge=1, le=65535)
-    username: str | None = None
-    path: str | None = None
-    app_name: str | None = None
-    launch_uri: str | None = None
-    native_client: str
+    username: str | None = Field(default=None, max_length=64)
+    path: str | None = Field(default=None, max_length=160)
+    app_name: str | None = Field(default=None, max_length=80)
+    launch_uri: str | None = Field(default=None, max_length=512)
+    native_client: SmallText
     requires_native_client: bool = True
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=240)
     is_primary: bool = False
 
 
 class ProtocolCapability(BaseModel):
     kind: ProtocolKind
     available: bool
-    strategy: str | None = None
-    detail: str
+    strategy: str | None = Field(default=None, max_length=80)
+    detail: str = Field(max_length=240)
 
 
 class NodeRecord(BaseModel):
@@ -124,7 +150,7 @@ class NodeView(BaseModel):
     platform: NodePlatform
     description: str | None = None
     location: str | None = None
-    tags: list[str] = Field(default_factory=list)
+    tags: list[TagText] = Field(default_factory=list)
     headless: bool = False
     agent_version: str | None = None
     status: NodeStatus
@@ -142,10 +168,10 @@ class ClientProfile(BaseModel):
     hostname: str = Field(min_length=1, max_length=255)
     overlay_ip: str = Field(min_length=3, max_length=255)
     platform: NodePlatform
-    hub_url: str
-    launcher_url: str
-    app_version: str | None = None
-    capabilities: list[ProtocolCapability] = Field(default_factory=list)
+    hub_url: str = Field(max_length=255)
+    launcher_url: str = Field(max_length=255)
+    app_version: str | None = Field(default=None, max_length=40)
+    capabilities: list[ProtocolCapability] = Field(default_factory=list, max_length=8)
 
 
 class ClientRecord(BaseModel):

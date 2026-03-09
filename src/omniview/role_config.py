@@ -15,24 +15,35 @@ from pydantic import BaseModel, Field
 
 from omniview.models import NodePlatform, ProtocolKind, ProtocolSpec
 from omniview.paths import client_config_path, ensure_config_root, host_config_path, hub_config_path
+from omniview.security import (
+    DEFAULT_MAX_RECORDS,
+    DEFAULT_MAX_REQUEST_BYTES,
+    generate_secret,
+    hub_default_host,
+    launcher_allow_origins,
+    secure_write_text,
+)
 
-
-_DEFAULT_CORS = [
-    "http://127.0.0.1:5173",
-    "http://localhost:5173",
-    "http://127.0.0.1:8000",
-    "http://localhost:8000",
-]
+_DEFAULT_CORS: list[str] = []
 
 
 class HubConfig(BaseModel):
-    host: str = "0.0.0.0"
+    host: str = Field(default_factory=hub_default_host)
     port: int = 8000
     cors_origins: list[str] = Field(default_factory=lambda: list(_DEFAULT_CORS))
+    admin_token: str = Field(default_factory=generate_secret)
+    agent_token: str = Field(default_factory=generate_secret)
+    tls_certfile: str | None = None
+    tls_keyfile: str | None = None
+    allow_insecure_public_http: bool = False
+    max_request_bytes: int = Field(default=DEFAULT_MAX_REQUEST_BYTES, ge=65_536, le=10_000_000)
+    max_nodes: int = Field(default=DEFAULT_MAX_RECORDS, ge=10, le=5_000)
+    max_clients: int = Field(default=DEFAULT_MAX_RECORDS, ge=10, le=5_000)
 
 
 class ClientConfig(BaseModel):
     hub_url: str = "http://127.0.0.1:8000"
+    hub_token: str | None = None
     host: str = "127.0.0.1"
     port: int = 32145
     client_id: str | None = None
@@ -41,7 +52,7 @@ class ClientConfig(BaseModel):
     telemetry_enabled: bool = True
     telemetry_interval_seconds: int = Field(default=30, ge=5)
     log_retention: int = Field(default=50, ge=10, le=500)
-    allow_origins: list[str] = Field(default_factory=lambda: ["*"])
+    allow_origins: list[str] = Field(default_factory=list)
     moonlight_binary: str | None = None
     moonlight_app_name: str = "Desktop"
     ssh_terminal: str = "auto"
@@ -50,6 +61,7 @@ class ClientConfig(BaseModel):
 
 class HostConfig(BaseModel):
     hub_url: str = "http://127.0.0.1:8000"
+    hub_token: str | None = None
     report_interval_seconds: int = Field(default=30, ge=5)
     screenshot_interval_seconds: int = Field(default=60, ge=5)
     screenshots_enabled: bool = True
@@ -81,8 +93,11 @@ def save_hub_config(config: HubConfig, path: Path | None = None) -> Path:
 def load_client_config(path: Path | None = None) -> ClientConfig:
     target = path or client_config_path()
     if not target.exists():
-        return ClientConfig()
-    return ClientConfig.model_validate(_read_toml(target))
+        return ClientConfig(allow_origins=launcher_allow_origins("http://127.0.0.1:8000"))
+    config = ClientConfig.model_validate(_read_toml(target))
+    if not config.allow_origins:
+        return config.model_copy(update={"allow_origins": launcher_allow_origins(config.hub_url)})
+    return config
 
 
 def save_client_config(config: ClientConfig, path: Path | None = None) -> Path:
@@ -107,6 +122,7 @@ def save_host_config(config: HostConfig, path: Path | None = None) -> Path:
 def default_host_config(
     *,
     hub_url: str,
+    hub_token: str | None,
     node_id: str | None,
     name: str | None,
     overlay_ip: str | None,
@@ -125,6 +141,7 @@ def default_host_config(
 
     return HostConfig(
         hub_url=hub_url,
+        hub_token=hub_token,
         node_id=final_node_id,
         name=final_name,
         hostname=hostname,
@@ -198,7 +215,7 @@ def _read_toml(path: Path) -> dict[str, Any]:
 def _write_toml(path: Path, payload: dict[str, Any]) -> None:
     ensure_config_root()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(tomli_w.dumps(payload), encoding="utf-8")
+    secure_write_text(path, tomli_w.dumps(payload))
 
 
 def shutil_which(name: str) -> str | None:

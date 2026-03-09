@@ -6,6 +6,9 @@ from importlib.resources import files
 from pathlib import Path
 import os
 
+from omniview.security import DEFAULT_MAX_RECORDS, DEFAULT_MAX_REQUEST_BYTES, generate_secret
+
+
 def _parse_csv_env(name: str, default: str) -> tuple[str, ...]:
     raw = os.getenv(name, default)
     values = tuple(item.strip() for item in raw.split(",") if item.strip())
@@ -20,6 +23,11 @@ class Settings:
     poll_interval_seconds: int
     cors_origins: tuple[str, ...]
     frontend_dist: Path
+    admin_token: str
+    agent_token: str
+    max_request_bytes: int
+    max_nodes: int
+    max_clients: int
 
 
 @lru_cache(maxsize=1)
@@ -37,7 +45,12 @@ def get_settings() -> Settings:
         poll_interval_seconds=int(os.getenv("OMV_POLL_INTERVAL_SECONDS", "15")),
         cors_origins=_parse_csv_env(
             "OMV_CORS_ORIGINS",
-            "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:8000,http://localhost:8000",
+            "",
         ),
         frontend_dist=frontend_dist or (source_dist if source_dist.exists() else packaged_dist),
+        admin_token=os.getenv("OMV_ADMIN_TOKEN", generate_secret()),
+        agent_token=os.getenv("OMV_AGENT_TOKEN", generate_secret()),
+        max_request_bytes=int(os.getenv("OMV_MAX_REQUEST_BYTES", str(DEFAULT_MAX_REQUEST_BYTES))),
+        max_nodes=int(os.getenv("OMV_MAX_NODES", str(DEFAULT_MAX_RECORDS))),
+        max_clients=int(os.getenv("OMV_MAX_CLIENTS", str(DEFAULT_MAX_RECORDS))),
     )

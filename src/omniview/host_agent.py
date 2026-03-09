@@ -15,6 +15,7 @@ from PIL import Image
 
 from omniview.models import AgentReport, NodeProfile, TelemetryMetrics, TelemetryPayload
 from omniview.role_config import HostConfig
+from omniview.security import AGENT_TOKEN_HEADER, ensure_http_url
 from omniview.telemetry import NetworkRateSampler, load_average, temperature_celsius, uptime_seconds
 
 
@@ -126,15 +127,18 @@ class HostAgent:
         return None
 
     def _post_report(self, report: AgentReport) -> None:
-        url = f"{self.config.hub_url.rstrip('/')}/api/agent/report"
+        url = ensure_http_url(f"{self.config.hub_url.rstrip('/')}/api/agent/report")
         payload = report.model_dump(mode="json", exclude_none=True)
         body = json.dumps(payload).encode("utf-8")
-        req = request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        headers = {"Content-Type": "application/json"}
+        if self.config.hub_token:
+            headers[AGENT_TOKEN_HEADER] = self.config.hub_token
+        req = request.Request(url, data=body, headers=headers, method="POST")
         try:
-            with request.urlopen(req, timeout=15) as response:
+            with request.urlopen(req, timeout=15) as response:  # nosec B310
                 response.read()
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
             raise RuntimeError(f"Hub rejected telemetry with HTTP {exc.code}: {detail or exc.reason}") from exc
         except error.URLError as exc:
-            raise RuntimeError(f"Unable to reach OmniView hub at {url}: {exc.reason}") from exc
+            raise RuntimeError(f"Unable to reach OMV hub at {url}: {exc.reason}") from exc

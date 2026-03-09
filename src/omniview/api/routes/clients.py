@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from omniview.api.deps import get_registry
+from omniview.api.deps import get_registry, require_admin, require_agent
 from omniview.models import ClientReport, ClientView
 from omniview.store import ClientNotFoundError, NodeRegistry
 
@@ -10,12 +10,19 @@ router = APIRouter(tags=["clients"])
 
 
 @router.get("/clients", response_model=list[ClientView])
-def list_clients(registry: NodeRegistry = Depends(get_registry)) -> list[ClientView]:
+def list_clients(
+    _admin: None = Depends(require_admin),
+    registry: NodeRegistry = Depends(get_registry),
+) -> list[ClientView]:
     return registry.list_clients()
 
 
 @router.get("/clients/{client_id}", response_model=ClientView)
-def get_client(client_id: str, registry: NodeRegistry = Depends(get_registry)) -> ClientView:
+def get_client(
+    client_id: str,
+    _admin: None = Depends(require_admin),
+    registry: NodeRegistry = Depends(get_registry),
+) -> ClientView:
     try:
         return registry.get_client(client_id)
     except ClientNotFoundError as exc:
@@ -23,5 +30,9 @@ def get_client(client_id: str, registry: NodeRegistry = Depends(get_registry)) -
 
 
 @router.post("/clients/report", response_model=ClientView, status_code=status.HTTP_202_ACCEPTED)
-def report_client(report: ClientReport, registry: NodeRegistry = Depends(get_registry)) -> ClientView:
+def report_client(
+    report: ClientReport,
+    _agent: None = Depends(require_agent),
+    registry: NodeRegistry = Depends(get_registry),
+) -> ClientView:
     return registry.ingest_client_report(report)
