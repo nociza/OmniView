@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omv"
-version = "0.3.1"
+version = "0.3.2"
 description = "Self-hosted control plane and CLI for monitoring hosts and launching native remote-access clients."
 readme = "README.md"
 requires-python = ">=3.12"

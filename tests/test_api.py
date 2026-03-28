@@ -103,7 +103,7 @@ def test_client_report_upserts_viewer_client() -> None:
             "platform": "macos",
             "hub_url": "http://100.64.8.21:8000",
             "launcher_url": "http://127.0.0.1:32145",
-            "app_version": "omv-0.3.1",
+            "app_version": "omv-0.3.2",
             "capabilities": [
                 {"kind": "moonlight", "available": True, "strategy": "moonlight-cli", "detail": "Moonlight installed locally."},
                 {"kind": "ssh", "available": True, "strategy": "terminal-applescript", "detail": "Terminal SSH handoff available."},

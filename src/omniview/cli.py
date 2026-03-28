@@ -332,7 +332,7 @@ def hub_service_install_command(args: argparse.Namespace) -> None:
 
 def hub_service_uninstall_command(args: argparse.Namespace) -> None:
     del args
-    _uninstall_service(role="hub", label="dev.omv.hub", description="OMV central hub", command=[resolve_omv_executable(), "hub", "start"])
+    _uninstall_service(role="hub", label="dev.omv.hub", description="OMV central hub", command=[resolve_omv_executable(), "hub", "run"])
 
 
 def client_init_command(args: argparse.Namespace) -> None:
@@ -416,7 +416,7 @@ def client_service_install_command(args: argparse.Namespace) -> None:
 
 def client_service_uninstall_command(args: argparse.Namespace) -> None:
     del args
-    _uninstall_service(role="client", label="dev.omv.client", description="OMV native client launcher", command=[resolve_omv_executable(), "client", "start"])
+    _uninstall_service(role="client", label="dev.omv.client", description="OMV native client launcher", command=[resolve_omv_executable(), "client", "run"])
 
 
 def host_init_command(args: argparse.Namespace) -> None:
@@ -515,7 +515,7 @@ def host_service_install_command(args: argparse.Namespace) -> None:
 
 def host_service_uninstall_command(args: argparse.Namespace) -> None:
     del args
-    _uninstall_service(role="host", label="dev.omv.host", description="OMV host agent", command=[resolve_omv_executable(), "host", "start"])
+    _uninstall_service(role="host", label="dev.omv.host", description="OMV host agent", command=[resolve_omv_executable(), "host", "run"])
 
 
 def install_command(args: argparse.Namespace) -> None:

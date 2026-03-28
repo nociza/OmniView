@@ -28,7 +28,7 @@ def main() -> None:
             "location": "CLI demo",
             "tags": ["example"],
             "headless": True,
-            "agent_version": "example-0.3.1",
+            "agent_version": "example-0.3.2",
             "protocols": [
                 {"kind": "moonlight", "label": "Moonlight", "priority": 1, "port": 47984, "app_name": "Desktop"},
                 {"kind": "ssh", "label": "SSH", "priority": 2, "port": 22, "username": "ops"},

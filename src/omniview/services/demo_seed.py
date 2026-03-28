@@ -20,7 +20,7 @@ def build_demo_records() -> list[NodeRecord]:
             location="Rack 01 / Home Lab",
             tags=["automation", "headless", "sunshine"],
             headless=True,
-            agent_version="agent-0.3.1",
+            agent_version="agent-0.3.2",
             protocols=[
                 ProtocolSpec(kind=ProtocolKind.MOONLIGHT, label="Moonlight", priority=1, port=47984, app_name="Desktop", note="Primary path for low-latency intervention."),
                 ProtocolSpec(kind=ProtocolKind.SSH, label="SSH", priority=2, port=22, username="ops", note="Fallback for service repair and bot restarts."),
@@ -61,7 +61,7 @@ def build_demo_records() -> list[NodeRecord]:
             location="Studio Shelf",
             tags=["macos", "vnc", "render"],
             headless=True,
-            agent_version="agent-0.3.1",
+            agent_version="agent-0.3.2",
             protocols=[
                 ProtocolSpec(kind=ProtocolKind.VNC, label="Screen Sharing", priority=1, port=5900, note="Bypasses user-session lockouts via ARD service."),
                 ProtocolSpec(kind=ProtocolKind.SSH, label="SSH", priority=2, port=22, username="nociza", note="Recovery path when WindowServer needs attention."),
@@ -189,7 +189,7 @@ def build_demo_client_records() -> list[ClientRecord]:
             platform=NodePlatform.MACOS,
             hub_url="http://100.64.8.21:8000",
             launcher_url="http://127.0.0.1:32145",
-            app_version="omv-0.3.1",
+            app_version="omv-0.3.2",
             capabilities=[
                 ProtocolCapability(kind=ProtocolKind.MOONLIGHT, available=True, strategy="moonlight-cli", detail="Moonlight installed locally."),
                 ProtocolCapability(kind=ProtocolKind.VNC, available=True, strategy="url-opener", detail="Screen Sharing URI handler available."),
@@ -241,7 +241,7 @@ def build_demo_client_records() -> list[ClientRecord]:
             platform=NodePlatform.WINDOWS,
             hub_url="http://100.64.8.21:8000",
             launcher_url="http://127.0.0.1:32145",
-            app_version="omv-0.3.1",
+            app_version="omv-0.3.2",
             capabilities=[
                 ProtocolCapability(kind=ProtocolKind.MOONLIGHT, available=False, detail="Moonlight was not detected locally."),
                 ProtocolCapability(kind=ProtocolKind.VNC, available=True, strategy="url-opener", detail="VNC URI handler available."),
