@@ -8,10 +8,13 @@ import pytest
 
 from omniview.cli import (
     _select_protocol,
+    client_start_command,
     host_init_command,
     host_report_command,
+    host_start_command,
     hub_init_command,
     hub_rotate_tokens_command,
+    hub_start_command,
     launch_command,
     status_command,
 )
@@ -251,3 +254,57 @@ def test_hub_rotate_tokens_syncs_local_agent_configs(monkeypatch: pytest.MonkeyP
     assert rotated_hub.agent_token != initial_hub.agent_token
     assert rotated_host.hub_token == rotated_hub.agent_token
     assert rotated_client.hub_token == rotated_hub.agent_token
+
+
+def test_hub_start_uses_background_service(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    recorded: dict[str, object] = {}
+
+    def fake_install(definition):
+        recorded["label"] = definition.label
+        recorded["command"] = definition.command
+        return Path("/tmp/dev.omv.hub.service")
+
+    monkeypatch.setattr("omniview.cli.install_user_service", fake_install)
+    monkeypatch.setattr("omniview.cli.resolve_omv_executable", lambda: "/usr/local/bin/omv")
+
+    hub_start_command(Namespace())
+
+    assert recorded["label"] == "dev.omv.hub"
+    assert recorded["command"] == ["/usr/local/bin/omv", "hub", "run"]
+    assert "Started hub service" in capsys.readouterr().out
+
+
+def test_client_start_uses_background_service(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    recorded: dict[str, object] = {}
+
+    def fake_install(definition):
+        recorded["label"] = definition.label
+        recorded["command"] = definition.command
+        return Path("/tmp/dev.omv.client.service")
+
+    monkeypatch.setattr("omniview.cli.install_user_service", fake_install)
+    monkeypatch.setattr("omniview.cli.resolve_omv_executable", lambda: "/usr/local/bin/omv")
+
+    client_start_command(Namespace())
+
+    assert recorded["label"] == "dev.omv.client"
+    assert recorded["command"] == ["/usr/local/bin/omv", "client", "run"]
+    assert "Started client service" in capsys.readouterr().out
+
+
+def test_host_start_uses_background_service(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    recorded: dict[str, object] = {}
+
+    def fake_install(definition):
+        recorded["label"] = definition.label
+        recorded["command"] = definition.command
+        return Path("/tmp/dev.omv.host.service")
+
+    monkeypatch.setattr("omniview.cli.install_user_service", fake_install)
+    monkeypatch.setattr("omniview.cli.resolve_omv_executable", lambda: "/usr/local/bin/omv")
+
+    host_start_command(Namespace())
+
+    assert recorded["label"] == "dev.omv.host"
+    assert recorded["command"] == ["/usr/local/bin/omv", "host", "run"]
+    assert "Started host service" in capsys.readouterr().out

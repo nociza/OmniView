@@ -32,7 +32,7 @@ from omniview.role_config import (
     save_hub_config,
 )
 from omniview.security import ADMIN_AUTH_SCHEME, ensure_http_url, generate_secret, is_loopback_host, launcher_allow_origins, requires_tls_for_bind_host
-from omniview.service_manager import ServiceDefinition, ServiceManagerUnsupported, install_user_service, resolve_omv_executable, uninstall_user_service
+from omniview.service_manager import ServiceDefinition, ServiceManagerUnsupported, install_user_service, resolve_omv_executable, stop_user_service, uninstall_user_service
 
 
 def main() -> None:
@@ -57,13 +57,19 @@ def build_parser() -> argparse.ArgumentParser:
     hub_init.add_argument("--allow-insecure-public-http", action="store_true")
     hub_init.set_defaults(func=hub_init_command)
 
-    hub_start = hub_sub.add_parser("start", help="Start the hub from config.")
-    hub_start.add_argument("--host")
-    hub_start.add_argument("--port", type=int)
-    hub_start.add_argument("--tls-cert")
-    hub_start.add_argument("--tls-key")
-    hub_start.add_argument("--allow-insecure-public-http", action="store_true")
+    hub_start = hub_sub.add_parser("start", help="Start the hub as a background user service.")
     hub_start.set_defaults(func=hub_start_command)
+
+    hub_run = hub_sub.add_parser("run", help="Run the hub in the foreground.")
+    hub_run.add_argument("--host")
+    hub_run.add_argument("--port", type=int)
+    hub_run.add_argument("--tls-cert")
+    hub_run.add_argument("--tls-key")
+    hub_run.add_argument("--allow-insecure-public-http", action="store_true")
+    hub_run.set_defaults(func=hub_run_command)
+
+    hub_stop = hub_sub.add_parser("stop", help="Stop the hub user service without uninstalling it.")
+    hub_stop.set_defaults(func=hub_stop_command)
 
     hub_doctor = hub_sub.add_parser("doctor", help="Inspect the hub setup.")
     hub_doctor.add_argument("--base-url")
@@ -101,10 +107,16 @@ def build_parser() -> argparse.ArgumentParser:
     client_init.add_argument("--allow-origin", action="append", default=[])
     client_init.set_defaults(func=client_init_command)
 
-    client_start = client_sub.add_parser("start", help="Start the local launcher from config.")
-    client_start.add_argument("--host")
-    client_start.add_argument("--port", type=int)
+    client_start = client_sub.add_parser("start", help="Start the native client as a background user service.")
     client_start.set_defaults(func=client_start_command)
+
+    client_run = client_sub.add_parser("run", help="Run the native client in the foreground.")
+    client_run.add_argument("--host")
+    client_run.add_argument("--port", type=int)
+    client_run.set_defaults(func=client_run_command)
+
+    client_stop = client_sub.add_parser("stop", help="Stop the native-client user service without uninstalling it.")
+    client_stop.set_defaults(func=client_stop_command)
 
     client_doctor = client_sub.add_parser("doctor", help="Inspect native-client launch capabilities.")
     client_doctor.set_defaults(func=client_doctor_command)
@@ -137,8 +149,14 @@ def build_parser() -> argparse.ArgumentParser:
     host_init.add_argument("--no-screenshots", action="store_true")
     host_init.set_defaults(func=host_init_command)
 
-    host_start = host_sub.add_parser("start", help="Start the host agent from config.")
+    host_start = host_sub.add_parser("start", help="Start the host agent as a background user service.")
     host_start.set_defaults(func=host_start_command)
+
+    host_run = host_sub.add_parser("run", help="Run the host agent in the foreground.")
+    host_run.set_defaults(func=host_run_command)
+
+    host_stop = host_sub.add_parser("stop", help="Stop the host-agent user service without uninstalling it.")
+    host_stop.set_defaults(func=host_stop_command)
 
     host_report = host_sub.add_parser("report", help="Send one telemetry report or print it.")
     host_report.add_argument("--dry-run", action="store_true")
@@ -208,10 +226,15 @@ def hub_init_command(args: argparse.Namespace) -> None:
         print(f"TLS: {config.tls_certfile}")
     print("Bootstrap another machine with: omv hub enroll host|client|browser")
     print("Next: omv hub start")
-    print("Optional: omv hub service-install")
+    print("Foreground debug: omv hub run")
 
 
 def hub_start_command(args: argparse.Namespace) -> None:
+    del args
+    _start_service(role="hub", label="dev.omv.hub", description="OMV central hub", command=[resolve_omv_executable(), "hub", "run"])
+
+
+def hub_run_command(args: argparse.Namespace) -> None:
     config = load_hub_config()
     effective = config.model_copy(
         update={
@@ -232,6 +255,11 @@ def hub_start_command(args: argparse.Namespace) -> None:
         ssl_certfile=effective.tls_certfile,
         ssl_keyfile=effective.tls_keyfile,
     )
+
+
+def hub_stop_command(args: argparse.Namespace) -> None:
+    del args
+    _stop_service(role="hub", label="dev.omv.hub", description="OMV central hub", command=[resolve_omv_executable(), "hub", "run"])
 
 
 def hub_doctor_command(args: argparse.Namespace) -> None:
@@ -299,7 +327,7 @@ def hub_rotate_tokens_command(args: argparse.Namespace) -> None:
 
 def hub_service_install_command(args: argparse.Namespace) -> None:
     del args
-    _install_service(role="hub", label="dev.omv.hub", description="OMV central hub", command=[resolve_omv_executable(), "hub", "start"])
+    _install_service(role="hub", label="dev.omv.hub", description="OMV central hub", command=[resolve_omv_executable(), "hub", "run"])
 
 
 def hub_service_uninstall_command(args: argparse.Namespace) -> None:
@@ -338,10 +366,15 @@ def client_init_command(args: argparse.Namespace) -> None:
     print("Optional: omv client install moonlight")
     print("Optional: omv client install tailscale")
     print("Then: omv client start")
-    print("Optional: omv client service-install")
+    print("Foreground debug: omv client run")
 
 
 def client_start_command(args: argparse.Namespace) -> None:
+    del args
+    _start_service(role="client", label="dev.omv.client", description="OMV native client launcher", command=[resolve_omv_executable(), "client", "run"])
+
+
+def client_run_command(args: argparse.Namespace) -> None:
     settings = get_launcher_settings()
     uvicorn.run(
         create_launcher_app(settings=settings),
@@ -349,6 +382,11 @@ def client_start_command(args: argparse.Namespace) -> None:
         port=args.port or settings.port,
         log_level="info",
     )
+
+
+def client_stop_command(args: argparse.Namespace) -> None:
+    del args
+    _stop_service(role="client", label="dev.omv.client", description="OMV native client launcher", command=[resolve_omv_executable(), "client", "run"])
 
 
 def client_doctor_command(args: argparse.Namespace) -> None:
@@ -373,7 +411,7 @@ def client_doctor_command(args: argparse.Namespace) -> None:
 
 def client_service_install_command(args: argparse.Namespace) -> None:
     del args
-    _install_service(role="client", label="dev.omv.client", description="OMV native client launcher", command=[resolve_omv_executable(), "client", "start"])
+    _install_service(role="client", label="dev.omv.client", description="OMV native client launcher", command=[resolve_omv_executable(), "client", "run"])
 
 
 def client_service_uninstall_command(args: argparse.Namespace) -> None:
@@ -413,13 +451,23 @@ def host_init_command(args: argparse.Namespace) -> None:
         print("Recommended: omv host install sunshine")
     print("Optional: omv host install tailscale")
     print("Then: omv host start")
-    print("Optional: omv host service-install")
+    print("Foreground debug: omv host run")
 
 
 def host_start_command(args: argparse.Namespace) -> None:
     del args
+    _start_service(role="host", label="dev.omv.host", description="OMV host agent", command=[resolve_omv_executable(), "host", "run"])
+
+
+def host_run_command(args: argparse.Namespace) -> None:
+    del args
     agent = HostAgent(load_host_config())
     agent.run_forever()
+
+
+def host_stop_command(args: argparse.Namespace) -> None:
+    del args
+    _stop_service(role="host", label="dev.omv.host", description="OMV host agent", command=[resolve_omv_executable(), "host", "run"])
 
 
 def host_report_command(args: argparse.Namespace) -> None:
@@ -462,7 +510,7 @@ def host_doctor_command(args: argparse.Namespace) -> None:
 
 def host_service_install_command(args: argparse.Namespace) -> None:
     del args
-    _install_service(role="host", label="dev.omv.host", description="OMV host agent", command=[resolve_omv_executable(), "host", "start"])
+    _install_service(role="host", label="dev.omv.host", description="OMV host agent", command=[resolve_omv_executable(), "host", "run"])
 
 
 def host_service_uninstall_command(args: argparse.Namespace) -> None:
@@ -719,6 +767,22 @@ def _install_service(*, role: str, label: str, description: str, command: list[s
     except ServiceManagerUnsupported as exc:
         raise SystemExit(str(exc)) from exc
     print(f"Installed {role} service at {path}")
+
+
+def _start_service(*, role: str, label: str, description: str, command: list[str]) -> None:
+    try:
+        path = install_user_service(ServiceDefinition(role=role, label=label, description=description, command=command))
+    except ServiceManagerUnsupported as exc:
+        raise SystemExit(str(exc)) from exc
+    print(f"Started {role} service at {path}")
+
+
+def _stop_service(*, role: str, label: str, description: str, command: list[str]) -> None:
+    try:
+        path = stop_user_service(ServiceDefinition(role=role, label=label, description=description, command=command))
+    except ServiceManagerUnsupported as exc:
+        raise SystemExit(str(exc)) from exc
+    print(f"Stopped {role} service at {path}")
 
 
 def _uninstall_service(*, role: str, label: str, description: str, command: list[str]) -> None:

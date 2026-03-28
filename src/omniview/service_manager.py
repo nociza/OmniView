@@ -39,6 +39,14 @@ def uninstall_user_service(definition: ServiceDefinition) -> Path:
     raise ServiceManagerUnsupported("User service uninstallation is currently supported on macOS and Linux only.")
 
 
+def stop_user_service(definition: ServiceDefinition) -> Path:
+    if sys.platform == "darwin":
+        return _stop_launchd_service(definition)
+    if sys.platform.startswith("linux"):
+        return _stop_systemd_service(definition)
+    raise ServiceManagerUnsupported("User service stop is currently supported on macOS and Linux only.")
+
+
 def resolve_omv_executable() -> str:
     executable = shutil.which("omv")
     if executable:
@@ -81,6 +89,12 @@ def _uninstall_launchd_service(definition: ServiceDefinition) -> Path:
     return target
 
 
+def _stop_launchd_service(definition: ServiceDefinition) -> Path:
+    target = launch_agents_dir() / f"{definition.label}.plist"
+    subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(target)], check=False)
+    return target
+
+
 def _install_systemd_service(definition: ServiceDefinition) -> Path:
     target = systemd_user_dir() / f"{definition.label}.service"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -110,6 +124,12 @@ def _uninstall_systemd_service(definition: ServiceDefinition) -> Path:
     if target.exists():
         target.unlink()
     subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+    return target
+
+
+def _stop_systemd_service(definition: ServiceDefinition) -> Path:
+    target = systemd_user_dir() / f"{definition.label}.service"
+    subprocess.run(["systemctl", "--user", "stop", target.stem], check=False)
     return target
 
 

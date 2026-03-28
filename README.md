@@ -64,10 +64,12 @@ omv hub init --port 8000
 omv hub start
 ```
 
-Optional background service:
+`omv hub start` is the normal path. It installs or refreshes the user service and returns immediately.
+
+Foreground debug:
 
 ```bash
-omv hub service-install
+omv hub run
 ```
 
 `omv hub init` now generates:
@@ -90,8 +92,8 @@ The browser session is protected. Open the hub URL and sign in with the admin to
 If you need to bind the hub publicly, configure TLS at init time:
 
 ```bash
-omv hub init --host 0.0.0.0 --tls-cert /path/to/fullchain.pem --tls-key /path/to/privkey.pem
-omv hub start
+    omv hub init --host 0.0.0.0 --tls-cert /path/to/fullchain.pem --tls-key /path/to/privkey.pem
+    omv hub start
 ```
 
 If you intentionally want plain HTTP on a wildcard or public bind, you must opt into it:
@@ -110,10 +112,12 @@ omv client install moonlight
 omv client start
 ```
 
-Optional background service:
+`omv client start` is the normal path. It installs or refreshes the user service and returns immediately.
+
+Foreground debug:
 
 ```bash
-omv client service-install
+omv client run
 ```
 
 If the hub and the viewing machine are the same box, `omv client init` can reuse the local hub agent token automatically.
@@ -136,6 +140,14 @@ omv host init --hub-url http://YOUR-HUB:8000 --hub-token YOUR_AGENT_TOKEN
 omv host start
 ```
 
+`omv host start` is the normal path. It installs or refreshes the user service and returns immediately.
+
+Foreground debug:
+
+```bash
+omv host run
+```
+
 If the host machine is also the hub machine, `omv host init` can reuse the local hub agent token automatically.
 
 For Linux hosts that should stream over Moonlight:
@@ -144,10 +156,10 @@ For Linux hosts that should stream over Moonlight:
 omv host install sunshine
 ```
 
-For a persistent agent:
+Stop it without uninstalling the unit:
 
 ```bash
-omv host service-install
+omv host stop
 ```
 
 ## Common workflows
@@ -159,8 +171,8 @@ One machine can run both the hub and the native client:
 ```bash
 omv hub init
 omv client init --hub-url http://127.0.0.1:8000
-omv hub service-install
-omv client service-install
+omv hub start
+omv client start
 ```
 
 ### Check local status
@@ -285,11 +297,14 @@ User-level services are supported on:
 Commands:
 
 ```bash
-omv hub service-install
+omv hub start
+omv hub stop
 omv hub service-uninstall
-omv client service-install
+omv client start
+omv client stop
 omv client service-uninstall
-omv host service-install
+omv host start
+omv host stop
 omv host service-uninstall
 ```
 

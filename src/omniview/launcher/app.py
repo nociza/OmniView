@@ -47,7 +47,7 @@ def create_app(
             if reporter is not None:
                 reporter.stop()
 
-    app = FastAPI(title="OMV Native Client", version="0.3.0", lifespan=lifespan)
+    app = FastAPI(title="OMV Native Client", version="0.3.1", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(app_settings.allow_origins),
